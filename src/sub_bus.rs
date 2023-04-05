@@ -2,8 +2,8 @@ use crate::worker::{Subscriber, WorkerId};
 use crate::Event;
 use log::error;
 use std::any::TypeId;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+
 use tokio::spawn;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
@@ -12,11 +12,17 @@ pub enum SubBusData {
     Unsubscribe(WorkerId),
     Event(Event),
 }
-
+#[allow(dead_code)]
 pub struct CopyOfSubBus {
     type_id: TypeId,
-    subscriber_num: usize,
-    pub(crate) tx: Sender<SubBusData>,
+    subscribers: HashSet<WorkerId>,
+    tx: Sender<SubBusData>,
+}
+
+impl Drop for CopyOfSubBus {
+    fn drop(&mut self) {
+        // todo!()
+    }
 }
 
 impl CopyOfSubBus {
@@ -26,18 +32,31 @@ impl CopyOfSubBus {
         }
     }
 
-    pub async fn send_subscribe(&self, id: WorkerId, tx: Sender<Event>) {
+    pub async fn send_subscribe(&mut self, subscriber: Subscriber) {
+        self.subscribers.insert(subscriber.id());
         if self
             .tx
-            .send(SubBusData::Subscribe(Subscriber::init(id, tx)))
+            .send(SubBusData::Subscribe(subscriber))
             .await
             .is_err()
         {
             error!("fail to send subscribe to sub bus");
         }
     }
+    pub async fn send_unsubscribe(&mut self, worker_id: WorkerId) -> usize {
+        self.subscribers.remove(&worker_id);
+        if self
+            .tx
+            .send(SubBusData::Unsubscribe(worker_id))
+            .await
+            .is_err()
+        {
+            error!("fail to send subscribe to sub bus");
+        }
+        self.subscribers.len()
+    }
 }
-
+#[allow(dead_code)]
 /// 子事件总线
 pub struct SubBus {
     type_id: TypeId,
@@ -56,7 +75,7 @@ impl SubBus {
         .run();
         CopyOfSubBus {
             type_id,
-            subscriber_num: 0,
+            subscribers: Default::default(),
             tx,
         }
     }
@@ -70,7 +89,11 @@ impl SubBus {
                     SubBusData::Unsubscribe(worker_id) => {
                         self.subscribers.remove(&worker_id);
                     }
-                    SubBusData::Event(event) => for subscriber in self.subscribers.values() {},
+                    SubBusData::Event(event) => {
+                        for subscriber in self.subscribers.values() {
+                            subscriber.send(event.clone()).await
+                        }
+                    }
                 }
             }
         });

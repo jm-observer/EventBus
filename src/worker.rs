@@ -1,10 +1,10 @@
 use crate::{BusData, Event};
+use anyhow::{anyhow, Result};
 use log::error;
 use std::any::TypeId;
 use std::collections::HashSet;
-use std::ops::Sub;
-use std::slice::Iter;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use tokio::sync::mpsc::{Receiver, Sender};
 
 pub struct IdentityOfWorker {
@@ -21,14 +21,33 @@ impl IdentityOfWorker {
             tx_data,
         }
     }
+
+    pub async fn recv_event(&mut self) -> Option<Event> {
+        self.rx_event.recv().await
+    }
+
+    pub async fn subscribe(&mut self, type_id: TypeId) -> Result<()> {
+        self.tx_data
+            .send(BusData::Subscribe(self.id, type_id))
+            .await
+            .map_err(|_| anyhow!("fail to contact bus"))
+    }
 }
+
+impl Drop for IdentityOfWorker {
+    fn drop(&mut self) {
+        // todo!()
+    }
+}
+
+static ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
 pub struct WorkerId(usize);
 
 impl Default for WorkerId {
     fn default() -> Self {
-        todo!()
+        Self(ID.fetch_add(1, Ordering::Release))
     }
 }
 
