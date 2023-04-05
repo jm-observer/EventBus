@@ -1,38 +1,32 @@
 #![feature(trait_upcasting)]
 
-mod event_bus;
+mod sub_bus;
+mod worker;
 
+use crate::sub_bus::{CopyOfSubBus, SubBus, SubBusData};
+use log::error;
 use std::any::{Any, TypeId};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::spawn;
-use tokio::sync::{mpsc::{Receiver, Sender}, mpsc, oneshot, RwLock};
+use tokio::sync::mpsc::channel;
+use tokio::sync::{
+    mpsc,
+    mpsc::{Receiver, Sender},
+    oneshot, RwLock,
+};
 use tokio::time::sleep;
-use crate::event_bus::CopyOfSubBus;
+use worker::{CopyOfWorker, IdentityOfWorker, WorkerId};
 
-pub type Event = dyn Any + Send + Sync + 'static;
-
-pub struct BusInterface {
-    tx: Sender<Arc<Event>>,
-    tx_subscribe: Sender<(TypeId, WorkerId)>,
-}
+pub type Event = Arc<dyn Any + Send + Sync + 'static>;
 
 pub enum BusData {
     Login(oneshot::Sender<IdentityOfWorker>),
     Logout(WorkerId),
-    DispatchEvent(TypeId, WorkerId),
-
-}
-pub struct IdentityOfWorker {
-    id: WorkerId,
-    rx: Receiver<Arc<Event>>,
-}
-struct CopyOfWorker {
-    id: WorkerId,
-    tx: Sender<Arc<Event>>,
-    subscribe_events: Vec<TypeId>,
+    Subscribe(WorkerId, TypeId),
+    DispatchEvent(Event),
 }
 
 pub struct CopyOfBus {
@@ -47,52 +41,76 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn run(mut self) {
+    pub fn init() -> CopyOfBus {
+        let (tx, rx) = channel(1024);
+        Self {
+            rx,
+            tx: tx.clone(),
+            workers: Default::default(),
+            sub_buses: Default::default(),
+        }
+        .run();
+        CopyOfBus { tx }
+    }
+    fn run(mut self) {
         spawn(async move {
             while let Some(event) = self.rx.recv().await {
-                // let type_id = event.as_ref().type_id();
-                // println!("Bus recv {:?}", type_id);
-                // if let Some(workers) = self.workers_subscribe.get(&type_id) {
-                //     for x in workers.iter() {
-                //         if let Some(worker) = self.workers.get(x) {
-                //             if let Err(_) = worker.send(event.clone()).await {
-                //                 println!("error");
-                //             }
-                //         }
-                //     }
-                // }
+                match event {
+                    BusData::Login(tx) => {
+                        let (identity_worker, copy_of_worker) = self.init_worker();
+                        self.workers.insert(copy_of_worker.id(), copy_of_worker);
+                        if tx.send(identity_worker).is_err() {
+                            error!("login fail: tx ack fail");
+                        }
+                    }
+                    BusData::Logout(worker_id) => {
+                        if let Some(worker) = self.workers.remove(&worker_id) {
+                            for ty_id in worker.subscribe_events() {
+                                if let Some(sub_bus) = self.sub_buses.get(&ty_id) {
+                                    if sub_bus
+                                        .tx
+                                        .send(SubBusData::Unsubscribe(worker_id))
+                                        .await
+                                        .is_err()
+                                    {
+                                        // todo
+                                    }
+                                } else {
+                                    //todo
+                                }
+                            }
+                        } else {
+                            // todo
+                        }
+                    }
+                    BusData::DispatchEvent(event) => {
+                        if let Some(sub_buses) = self.sub_buses.get(&event.type_id()) {
+                            sub_buses.send_event(event).await;
+                        }
+                    }
+                    BusData::Subscribe(worker_id, typeid) => {
+                        if let Some(worker) = self.workers.get_mut(&worker_id) {
+                            worker.subscribe_event(typeid);
+                            if let Some(sub_buses) = self.sub_buses.get(&typeid) {
+                                sub_buses.send_subscribe(worker_id, worker.tx()).await;
+                            } else {
+                                let copy = SubBus::init(typeid);
+                                copy.send_subscribe(worker_id, worker.tx()).await;
+                                self.sub_buses.insert(typeid, copy);
+                            }
+                        }
+                    }
+                }
             }
         });
     }
-    // pub fn init() -> Self {
-    //     let (tx, rx) =mpsc::channel(100);
-    //     Self {
-    //         workers: Default::default(),
-    //         rx,
-    //         tx,
-    //         sub_buses: Default::default(),
-    //     }
-    // }
-    // pub fn interface(&self) -> BusInterface {
-    //     BusInterface {
-    //         tx: self.tx.clone(),
-    //         tx_subscribe: self.tx_subscribe.clone(),
-    //     }
-    // }
-    // pub fn register(&mut self, worker_id: WorkerId, tx: Sender<Arc<Event>>)  {
-    //     self.workers.insert(worker_id, tx);
-    // }
-    // pub fn subscribe(&mut self, worker_id: WorkerId, type_id: TypeId)  {
-    //     println!("subscribe {:?}", type_id);
-    //     let Some(workers) = self.workers_subscribe.get_mut(&type_id) else {
-    //         let mut workers = Vec::new();
-    //         workers.push(worker_id);
-    //         self.workers_subscribe.insert(type_id, workers);
-    //         return;
-    //     };
-    //     workers.push(worker_id);
-    // }
-}
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone, Hash)]
-pub struct WorkerId(usize);
+    fn init_worker(&self) -> (IdentityOfWorker, CopyOfWorker) {
+        let (tx_event, rx_event) = channel(1024);
+        let id = WorkerId::default();
+        (
+            IdentityOfWorker::init(id, rx_event, self.tx.clone()),
+            CopyOfWorker::init(id, tx_event),
+        )
+    }
+}
