@@ -12,9 +12,9 @@ use anyhow::{anyhow, Result};
 use std::sync::Arc;
 
 use tokio::spawn;
-use tokio::sync::mpsc::channel;
+use tokio::sync::mpsc::unbounded_channel;
 use tokio::sync::{
-    mpsc::{Receiver, Sender},
+    mpsc::{UnboundedReceiver, UnboundedSender},
     oneshot,
 };
 
@@ -26,12 +26,12 @@ pub enum BusData {
     Login(oneshot::Sender<IdentityOfWorker>),
     Logout(WorkerId),
     Subscribe(WorkerId, TypeId),
-    DispatchEvent(Event),
+    DispatchEvent(WorkerId, Event),
 }
 
 #[derive(Clone)]
 pub struct CopyOfBus {
-    tx: Sender<BusData>,
+    tx: UnboundedSender<BusData>,
 }
 
 impl CopyOfBus {
@@ -39,29 +39,28 @@ impl CopyOfBus {
         let (tx, rx) = oneshot::channel();
         self.tx
             .send(BusData::Login(tx))
-            .await
             .map_err(|_| anyhow!("fail to contact bus"))?;
         Ok(rx.await.map_err(|_| anyhow!("fail to contact bus"))?)
     }
-
-    pub async fn send_event(&self, event: Event) -> Result<()> {
-        self.tx
-            .send(BusData::DispatchEvent(event))
-            .await
-            .map_err(|_| anyhow!("fail to contact bus"))
-    }
+    //
+    // pub async fn send_event(&self, event: Event) -> Result<()> {
+    //     self.tx
+    //         .send(BusData::DispatchEvent(event))
+    //         .await
+    //         .map_err(|_| anyhow!("fail to contact bus"))
+    // }
 }
 
 pub struct Bus {
-    rx: Receiver<BusData>,
-    tx: Sender<BusData>,
+    rx: UnboundedReceiver<BusData>,
+    tx: UnboundedSender<BusData>,
     workers: HashMap<WorkerId, CopyOfWorker>,
     sub_buses: HashMap<TypeId, CopyOfSubBus>,
 }
 
 impl Bus {
     pub fn init() -> CopyOfBus {
-        let (tx, rx) = channel(1024);
+        let (tx, rx) = unbounded_channel();
         Self {
             rx,
             tx: tx.clone(),
@@ -100,8 +99,12 @@ impl Bus {
                             // todo
                         }
                     }
-                    BusData::DispatchEvent(event) => {
-                        debug!("DispatchEvent {:?}", event.as_ref().type_id());
+                    BusData::DispatchEvent(worker_id, event) => {
+                        debug!(
+                            "{:?} DispatchEvent {:?}",
+                            worker_id,
+                            event.as_ref().type_id()
+                        );
                         if let Some(sub_buses) = self.sub_buses.get(&event.as_ref().type_id()) {
                             sub_buses.send_event(event).await;
                         }
@@ -125,7 +128,7 @@ impl Bus {
     }
 
     fn init_worker(&self) -> (IdentityOfWorker, CopyOfWorker) {
-        let (tx_event, rx_event) = channel(1024);
+        let (tx_event, rx_event) = unbounded_channel();
         let id = WorkerId::default();
         (
             IdentityOfWorker::init(id, rx_event, self.tx.clone()),
