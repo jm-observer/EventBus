@@ -1,4 +1,4 @@
-use crate::{BusData, Event};
+use crate::{BusData, CopyOfBus, Event};
 use anyhow::{anyhow, Result};
 use log::error;
 use std::any::{Any, TypeId};
@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 pub struct IdentityOfWorker {
@@ -109,5 +110,23 @@ impl CopyOfWorker {
     }
     pub fn subscribe_events(&self) -> std::collections::hash_set::Iter<'_, TypeId> {
         self.subscribe_events.iter()
+    }
+}
+
+#[async_trait]
+pub trait Worker {
+    async fn login(bus: &CopyOfBus) -> Result<IdentityOfWorker> {
+        bus.login().await
+    }
+
+    fn identity(&self) -> &IdentityOfWorker;
+
+    fn subscribe(&self, type_id: TypeId) -> Result<()> {
+        self.identity().subscribe(type_id)
+    }
+
+    fn dispatch_event<T: Any + Send + Sync + 'static>(&mut self, event: T) -> Result<()> {
+        let identity = self.identity();
+        identity.dispatch_event(event)
     }
 }

@@ -1,11 +1,9 @@
 #![feature(async_fn_in_trait)]
 #![allow(incomplete_features)]
-use anyhow::Result;
-use async_trait::async_trait;
-use event_bus::worker::IdentityOfWorker;
+use event_bus::worker::{IdentityOfWorker, Worker};
 use event_bus::{Bus, CopyOfBus};
 use log::debug;
-use std::any::{Any, TypeId};
+use std::any::Any;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::time::sleep;
@@ -27,30 +25,6 @@ struct BEvent;
 
 struct WorkerA {
     identity: IdentityOfWorker,
-}
-
-#[async_trait]
-trait Worker {
-    async fn login(bus: &CopyOfBus) -> Result<IdentityOfWorker> {
-        bus.login().await
-    }
-
-    fn identity(&self) -> &IdentityOfWorker;
-
-    fn subscribe(&self, type_id: TypeId) -> Result<()> {
-        self.identity().subscribe(type_id)
-    }
-
-    fn dispatch_event<T: Any + Send + Sync + 'static>(&mut self, event: T) -> Result<()> {
-        let identity = self.identity();
-        identity.dispatch_event(event)
-    }
-}
-
-impl Worker for WorkerA {
-    fn identity(&self) -> &IdentityOfWorker {
-        &self.identity
-    }
 }
 
 impl WorkerA {
@@ -75,12 +49,6 @@ struct WorkerB {
     identity: IdentityOfWorker,
 }
 
-impl Worker for WorkerB {
-    fn identity(&self) -> &IdentityOfWorker {
-        &self.identity
-    }
-}
-
 impl WorkerB {
     pub async fn init(bus: &CopyOfBus) {
         let identity = bus.login().await.unwrap();
@@ -97,5 +65,17 @@ impl WorkerB {
                 }
             }
         });
+    }
+}
+
+impl Worker for WorkerA {
+    fn identity(&self) -> &IdentityOfWorker {
+        &self.identity
+    }
+}
+
+impl Worker for WorkerB {
+    fn identity(&self) -> &IdentityOfWorker {
+        &self.identity
     }
 }
