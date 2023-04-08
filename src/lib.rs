@@ -24,9 +24,9 @@ pub type Event = Arc<dyn Any + Send + Sync + 'static>;
 
 pub enum BusData {
     Login(oneshot::Sender<IdentityOfWorker>),
-    Logout(WorkerId),
     Subscribe(WorkerId, TypeId),
     DispatchEvent(WorkerId, Event),
+    Drop(WorkerId),
 }
 
 #[derive(Clone)]
@@ -81,7 +81,8 @@ impl Bus {
                             error!("login fail: tx ack fail");
                         }
                     }
-                    BusData::Logout(worker_id) => {
+                    BusData::Drop(worker_id) => {
+                        debug!("{:?} Drop", worker_id);
                         if let Some(worker) = self.workers.remove(&worker_id) {
                             for ty_id in worker.subscribe_events() {
                                 let should_remove =

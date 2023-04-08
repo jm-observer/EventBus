@@ -15,6 +15,14 @@ pub struct IdentityOfWorker {
     tx_data: UnboundedSender<BusData>,
 }
 
+impl Drop for IdentityOfWorker {
+    fn drop(&mut self) {
+        if self.tx_data.send(BusData::Drop(self.id)).is_err() {
+            error!("{:?} send BusData::Drop fail", self.id);
+        }
+    }
+}
+
 impl IdentityOfWorker {
     pub fn init(
         id: WorkerId,
@@ -42,12 +50,6 @@ impl IdentityOfWorker {
         self.tx_data
             .send(BusData::DispatchEvent(self.id, Arc::new(event)))
             .map_err(|_| anyhow!("fail to contact bus"))
-    }
-}
-
-impl Drop for IdentityOfWorker {
-    fn drop(&mut self) {
-        // todo!()
     }
 }
 

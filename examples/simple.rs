@@ -14,7 +14,6 @@ async fn main() {
     let copy_of_bus = Bus::init();
     WorkerA::init(&copy_of_bus).await;
     WorkerB::init(&copy_of_bus).await;
-    sleep(Duration::from_secs(1)).await;
     sleep(Duration::from_secs(5)).await
 }
 
@@ -35,10 +34,13 @@ impl WorkerA {
     fn run(mut self) {
         spawn(async move {
             self.subscribe(AEvent.type_id()).unwrap();
+            sleep(Duration::from_secs(1)).await;
+            self.dispatch_event(BEvent).unwrap();
             while let Some(event) = self.identity.recv_event().await {
                 debug!("WorkerA recv {:?}", event.as_ref().type_id());
                 if let Some(a) = event.as_ref().downcast_ref::<AEvent>() {
                     debug!("WorkerA recv {:?}", a);
+                    break;
                 }
             }
         });
@@ -62,6 +64,8 @@ impl WorkerB {
                 debug!("WorkerB recv {:?}", event.as_ref().type_id());
                 if let Some(a) = event.as_ref().downcast_ref::<BEvent>() {
                     debug!("WorkerB recv {:?}", a);
+                    self.dispatch_event(AEvent).unwrap();
+                    break;
                 }
             }
         });
