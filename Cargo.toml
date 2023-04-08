@@ -1,9 +1,9 @@
 [package]
 name = "for_event_bus"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "a event bus"
-repository = "https://github.com/jm-observer/event_bus"
+repository = "https://github.com/jm-observer/for_event_bus"
 
 license-file = "LICENSE"
 readme = "README.md"
