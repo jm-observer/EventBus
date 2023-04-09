@@ -1,7 +1,7 @@
-#![feature(associated_type_defaults)]
+// #![feature(associated_type_defaults)]
 // #![feature(trait_upcasting)]
 
-pub mod sub_bus;
+mod sub_bus;
 pub mod worker;
 
 use crate::sub_bus::{CopyOfSubBus, SubBus};
@@ -19,7 +19,7 @@ use tokio::sync::{
     oneshot,
 };
 
-use crate::worker::IdentityOfTx;
+use crate::worker::{IdentityOfSimple, IdentityOfTmp};
 use worker::{CopyOfWorker, IdentityOfRx, WorkerId};
 
 pub type Event = Arc<dyn Any + Send + Sync + 'static>;
@@ -34,14 +34,16 @@ impl<T> From<SendError<T>> for BusError {
         Self::ChannelErr
     }
 }
+
 impl From<oneshot::error::RecvError> for BusError {
     fn from(_: oneshot::error::RecvError) -> Self {
         Self::ChannelErr
     }
 }
 
-pub enum BusData {
-    Login(oneshot::Sender<(IdentityOfRx, IdentityOfTx)>),
+enum BusData {
+    Login(oneshot::Sender<IdentityOfTmp>),
+    SimpleLogin(oneshot::Sender<IdentityOfTmp>),
     Subscribe(WorkerId, TypeId),
     DispatchEvent(WorkerId, Event),
     Drop(WorkerId),
@@ -53,18 +55,20 @@ pub struct CopyOfBus {
 }
 
 impl CopyOfBus {
-    pub async fn login(&self) -> Result<(IdentityOfRx, IdentityOfTx), BusError> {
+    pub async fn login(&self) -> Result<IdentityOfRx, BusError> {
         let (tx, rx) = oneshot::channel();
         self.tx.send(BusData::Login(tx))?;
-        Ok(rx.await?)
+        Ok(rx.await?.into())
     }
-    //
-    // pub async fn send_event(&self, event: Event) -> Result<()> {
-    //     self.tx
-    //         .send(BusData::DispatchEvent(event))
-    //         .await
-    //         .map_err(|_| anyhow!("fail to contact bus"))
-    // }
+    pub async fn simple_login<T: Any + Send + Sync + 'static>(
+        &self,
+    ) -> Result<IdentityOfSimple<T>, BusError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(BusData::SimpleLogin(tx))?;
+        let rx: IdentityOfSimple<T> = rx.await?.into();
+        rx.subscribe()?;
+        Ok(rx)
+    }
 }
 
 pub struct Bus {
@@ -91,9 +95,16 @@ impl Bus {
             while let Some(event) = self.rx.recv().await {
                 match event {
                     BusData::Login(tx) => {
-                        let (identity_rx, identify_tx, copy_of_worker) = self.init_worker();
+                        let (identity_rx, copy_of_worker) = self.init_worker();
                         self.workers.insert(copy_of_worker.id(), copy_of_worker);
-                        if tx.send((identity_rx, identify_tx)).is_err() {
+                        if tx.send(identity_rx).is_err() {
+                            error!("login fail: tx ack fail");
+                        }
+                    }
+                    BusData::SimpleLogin(tx) => {
+                        let (identity_rx, copy_of_worker) = self.init_worker();
+                        self.workers.insert(copy_of_worker.id(), copy_of_worker);
+                        if tx.send(identity_rx).is_err() {
                             error!("login fail: tx ack fail");
                         }
                     }
@@ -144,12 +155,23 @@ impl Bus {
         });
     }
 
-    fn init_worker(&self) -> (IdentityOfRx, IdentityOfTx, CopyOfWorker) {
+    // fn init_worker(&self) -> (IdentityOfRx, CopyOfWorker) {
+    //     let (tx_event, rx_event) = unbounded_channel();
+    //     let id = WorkerId::default();
+    //     (
+    //         IdentityOfRx::init(id, rx_event, self.tx.clone()),
+    //         CopyOfWorker::init(id, tx_event),
+    //     )
+    // }
+    fn init_worker(&self) -> (IdentityOfTmp, CopyOfWorker) {
         let (tx_event, rx_event) = unbounded_channel();
         let id = WorkerId::default();
         (
-            IdentityOfRx::init(id, rx_event, self.tx.clone()),
-            IdentityOfTx::init(id, self.tx.clone()),
+            IdentityOfTmp {
+                id,
+                rx_event,
+                tx_data: self.tx.clone(),
+            },
             CopyOfWorker::init(id, tx_event),
         )
     }

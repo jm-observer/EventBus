@@ -1,9 +1,6 @@
-#![feature(async_fn_in_trait)]
-#![allow(incomplete_features)]
-use for_event_bus::worker::{IdentityOfRx, IdentityOfTx, Worker};
+use for_event_bus::worker::{IdentityOfRx, IdentityOfSimple};
 use for_event_bus::{Bus, CopyOfBus};
 use log::debug;
-use std::any::Any;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::time::sleep;
@@ -12,8 +9,9 @@ use tokio::time::sleep;
 async fn main() {
     custom_utils::logger::logger_stdout_debug();
     let copy_of_bus = Bus::init();
-    WorkerA::init(&copy_of_bus).await;
     WorkerB::init(&copy_of_bus).await;
+    sleep(Duration::from_secs(1)).await;
+    WorkerA::init(&copy_of_bus).await;
     sleep(Duration::from_secs(5)).await
 }
 
@@ -23,25 +21,18 @@ struct AEvent;
 struct BEvent;
 
 struct WorkerA {
-    identity: IdentityOfRx,
-    identity_tx: IdentityOfTx,
+    identity: IdentityOfSimple<AEvent>,
 }
 
 impl WorkerA {
     pub async fn init(bus: &CopyOfBus) {
-        let (identity, identity_tx) = bus.login().await.unwrap();
-        Self {
-            identity,
-            identity_tx,
-        }
-        .run();
+        let identity = bus.simple_login().await.unwrap();
+        Self { identity }.run();
     }
     fn run(mut self) {
         spawn(async move {
-            self.subscribe(AEvent.type_id()).unwrap();
-            sleep(Duration::from_secs(1)).await;
-            self.dispatch_event(BEvent).unwrap();
-            while let Ok(event) = self.identity.recv::<AEvent>().await {
+            self.identity.dispatch_event(BEvent).unwrap();
+            while let Ok(event) = self.identity.recv().await {
                 debug!("WorkerA recv {:?}", event);
                 break;
             }
@@ -51,39 +42,27 @@ impl WorkerA {
 
 struct WorkerB {
     identity: IdentityOfRx,
-    identity_tx: IdentityOfTx,
 }
 
 impl WorkerB {
     pub async fn init(bus: &CopyOfBus) {
-        let (identity, identity_tx) = bus.login().await.unwrap();
-        Self {
-            identity,
-            identity_tx,
-        }
-        .run();
+        let identity = bus.login().await.unwrap();
+        Self { identity }.run();
     }
 
     fn run(mut self) {
         spawn(async move {
-            self.subscribe(BEvent.type_id()).unwrap();
-            while let Ok(event) = self.identity.recv::<BEvent>().await {
-                debug!("WorkerA recv {:?}", event);
-                self.dispatch_event(AEvent).unwrap();
-                break;
+            self.identity.subscribe::<BEvent>().unwrap();
+            self.identity.subscribe::<AEvent>().unwrap();
+            while let Ok(event) = self.identity.recv_event().await {
+                if let Ok(a) = event.clone().downcast::<AEvent>() {
+                    debug!("WorkerB recv {:?}", a);
+                    break;
+                } else if let Ok(b) = event.clone().downcast::<BEvent>() {
+                    debug!("WorkerB recv {:?}", b);
+                    self.identity.dispatch_event(AEvent).unwrap();
+                }
             }
         });
-    }
-}
-
-impl Worker for WorkerA {
-    fn identity_tx(&self) -> &IdentityOfTx {
-        &self.identity_tx
-    }
-}
-
-impl Worker for WorkerB {
-    fn identity_tx(&self) -> &IdentityOfTx {
-        &self.identity_tx
     }
 }

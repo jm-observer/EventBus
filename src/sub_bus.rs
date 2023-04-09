@@ -7,14 +7,14 @@ use std::collections::{HashMap, HashSet};
 use tokio::spawn;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-pub enum SubBusData {
+pub(crate) enum SubBusData {
     Subscribe(Subscriber),
     Unsubscribe(WorkerId),
     Event(Event),
     Drop,
 }
 #[allow(dead_code)]
-pub struct CopyOfSubBus {
+pub(crate) struct CopyOfSubBus {
     type_id: TypeId,
     subscribers: HashSet<WorkerId>,
     tx: UnboundedSender<SubBusData>,
@@ -58,7 +58,7 @@ pub struct SubBus {
 }
 
 impl SubBus {
-    pub fn init(type_id: TypeId) -> CopyOfSubBus {
+    pub(crate) fn init(type_id: TypeId) -> CopyOfSubBus {
         let (tx, rx) = unbounded_channel();
         Self {
             type_id,
