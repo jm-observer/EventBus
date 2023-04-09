@@ -1,5 +1,4 @@
-use crate::{BusData, CopyOfBus, Event};
-use anyhow::{anyhow, Result};
+use crate::{BusData, BusError, Event};
 use log::error;
 use std::any::{Any, TypeId};
 use std::collections::HashSet;
@@ -9,13 +8,34 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-pub struct IdentityOfWorker {
+pub struct IdentityOfTx {
+    id: WorkerId,
+    tx_data: UnboundedSender<BusData>,
+}
+
+impl IdentityOfTx {
+    pub fn init(id: WorkerId, tx_data: UnboundedSender<BusData>) -> Self {
+        Self { id, tx_data }
+    }
+
+    pub fn subscribe(&self, type_id: TypeId) -> Result<(), BusError> {
+        Ok(self.tx_data.send(BusData::Subscribe(self.id, type_id))?)
+    }
+
+    pub fn dispatch_event<T: Any + Send + Sync + 'static>(&self, event: T) -> Result<(), BusError> {
+        Ok(self
+            .tx_data
+            .send(BusData::DispatchEvent(self.id, Arc::new(event)))?)
+    }
+}
+
+pub struct IdentityOfRx {
     id: WorkerId,
     rx_event: UnboundedReceiver<Event>,
     tx_data: UnboundedSender<BusData>,
 }
 
-impl Drop for IdentityOfWorker {
+impl Drop for IdentityOfRx {
     fn drop(&mut self) {
         if self.tx_data.send(BusData::Drop(self.id)).is_err() {
             error!("{:?} send BusData::Drop fail", self.id);
@@ -23,7 +43,7 @@ impl Drop for IdentityOfWorker {
     }
 }
 
-impl IdentityOfWorker {
+impl IdentityOfRx {
     pub fn init(
         id: WorkerId,
         rx_event: UnboundedReceiver<Event>,
@@ -36,20 +56,27 @@ impl IdentityOfWorker {
         }
     }
 
-    pub async fn recv_event(&mut self) -> Option<Event> {
-        self.rx_event.recv().await
+    // pub async fn recv_event<T: Send + Sync + 'static>(&mut self) -> Option<T> {
+    //     self.rx_event.recv().await
+    // }
+
+    pub async fn recv<T: Send + Sync + 'static>(&mut self) -> Result<Arc<T>, BusError> {
+        while let Some(event) = self.rx_event.recv().await {
+            if let Ok(msg) = event.downcast::<T>() {
+                return Ok(msg);
+            }
+        }
+        Err(BusError::ChannelErr)
     }
 
-    pub fn subscribe(&self, type_id: TypeId) -> Result<()> {
-        self.tx_data
-            .send(BusData::Subscribe(self.id, type_id))
-            .map_err(|_| anyhow!("fail to contact bus"))
+    pub fn subscribe(&self, type_id: TypeId) -> Result<(), BusError> {
+        Ok(self.tx_data.send(BusData::Subscribe(self.id, type_id))?)
     }
 
-    pub fn dispatch_event<T: Any + Send + Sync + 'static>(&self, event: T) -> Result<()> {
-        self.tx_data
-            .send(BusData::DispatchEvent(self.id, Arc::new(event)))
-            .map_err(|_| anyhow!("fail to contact bus"))
+    pub fn dispatch_event<T: Any + Send + Sync + 'static>(&self, event: T) -> Result<(), BusError> {
+        Ok(self
+            .tx_data
+            .send(BusData::DispatchEvent(self.id, Arc::new(event)))?)
     }
 }
 
@@ -117,18 +144,27 @@ impl CopyOfWorker {
 
 #[async_trait]
 pub trait Worker {
-    async fn login(bus: &CopyOfBus) -> Result<IdentityOfWorker> {
-        bus.login().await
+    // type EventType: Send + Sync + 'static = ();
+
+    fn identity_tx(&self) -> &IdentityOfTx;
+
+    fn subscribe(&self, type_id: TypeId) -> Result<(), BusError> {
+        self.identity_tx().subscribe(type_id)
     }
 
-    fn identity(&self) -> &IdentityOfWorker;
-
-    fn subscribe(&self, type_id: TypeId) -> Result<()> {
-        self.identity().subscribe(type_id)
-    }
-
-    fn dispatch_event<T: Any + Send + Sync + 'static>(&mut self, event: T) -> Result<()> {
-        let identity = self.identity();
+    fn dispatch_event<T: Any + Send + Sync + 'static>(&mut self, event: T) -> Result<(), BusError> {
+        let identity = self.identity_tx();
         identity.dispatch_event(event)
     }
+
+    /*
+    async fn recv(&mut self) -> Option<Arc<Self::EventType>> {
+        while let Some(event) = self.identity_rx_mut().recv_event().await {
+            if let Ok(msg) = event.downcast::<Self::EventType>() {
+                return Some(msg);
+            }
+        }
+        None
+    }
+    */
 }

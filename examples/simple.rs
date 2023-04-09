@@ -1,7 +1,7 @@
 #![feature(async_fn_in_trait)]
 #![allow(incomplete_features)]
-use event_bus::worker::{IdentityOfWorker, Worker};
-use event_bus::{Bus, CopyOfBus};
+use for_event_bus::worker::{IdentityOfRx, IdentityOfTx, Worker};
+use for_event_bus::{Bus, CopyOfBus};
 use log::debug;
 use std::any::Any;
 use std::time::Duration;
@@ -23,63 +23,67 @@ struct AEvent;
 struct BEvent;
 
 struct WorkerA {
-    identity: IdentityOfWorker,
+    identity: IdentityOfRx,
+    identity_tx: IdentityOfTx,
 }
 
 impl WorkerA {
     pub async fn init(bus: &CopyOfBus) {
-        let identity = <WorkerA as Worker>::login(bus).await.unwrap();
-        Self { identity }.run();
+        let (identity, identity_tx) = bus.login().await.unwrap();
+        Self {
+            identity,
+            identity_tx,
+        }
+        .run();
     }
     fn run(mut self) {
         spawn(async move {
             self.subscribe(AEvent.type_id()).unwrap();
             sleep(Duration::from_secs(1)).await;
             self.dispatch_event(BEvent).unwrap();
-            while let Some(event) = self.identity.recv_event().await {
-                debug!("WorkerA recv {:?}", event.as_ref().type_id());
-                if let Some(a) = event.as_ref().downcast_ref::<AEvent>() {
-                    debug!("WorkerA recv {:?}", a);
-                    break;
-                }
+            while let Ok(event) = self.identity.recv::<AEvent>().await {
+                debug!("WorkerA recv {:?}", event);
+                break;
             }
         });
     }
 }
 
 struct WorkerB {
-    identity: IdentityOfWorker,
+    identity: IdentityOfRx,
+    identity_tx: IdentityOfTx,
 }
 
 impl WorkerB {
     pub async fn init(bus: &CopyOfBus) {
-        let identity = bus.login().await.unwrap();
-        Self { identity }.run();
+        let (identity, identity_tx) = bus.login().await.unwrap();
+        Self {
+            identity,
+            identity_tx,
+        }
+        .run();
     }
 
     fn run(mut self) {
         spawn(async move {
             self.subscribe(BEvent.type_id()).unwrap();
-            while let Some(event) = self.identity.recv_event().await {
-                debug!("WorkerB recv {:?}", event.as_ref().type_id());
-                if let Some(a) = event.as_ref().downcast_ref::<BEvent>() {
-                    debug!("WorkerB recv {:?}", a);
-                    self.dispatch_event(AEvent).unwrap();
-                    break;
-                }
+            while let Ok(event) = self.identity.recv::<BEvent>().await {
+                debug!("WorkerA recv {:?}", event);
+                self.dispatch_event(AEvent).unwrap();
+                break;
             }
         });
     }
 }
 
 impl Worker for WorkerA {
-    fn identity(&self) -> &IdentityOfWorker {
-        &self.identity
+    fn identity_tx(&self) -> &IdentityOfTx {
+        &self.identity_tx
     }
 }
 
 impl Worker for WorkerB {
-    fn identity(&self) -> &IdentityOfWorker {
-        &self.identity
+    fn identity_tx(&self) -> &IdentityOfTx {
+        &self.identity_tx
     }
 }
