@@ -36,6 +36,7 @@ impl IdentityOfTx {
     }
 }
 
+/// 通用的worker身份标识，可以订阅多种事件
 pub struct IdentityOfRx {
     pub(crate) id: WorkerId,
     pub(crate) rx_event: UnboundedReceiver<Event>,
@@ -150,6 +151,7 @@ impl IdentityOfRx {
     }
 }
 
+/// 简单的worker身份标识，只订阅一种事件
 pub struct IdentityOfSimple<T> {
     pub(crate) id: WorkerId,
     pub(crate) rx_event: UnboundedReceiver<Event>,

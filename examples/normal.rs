@@ -1,7 +1,7 @@
-use std::any::Any;
-use for_event_bus::worker::{IdentityOfSimple};
+use for_event_bus::worker::{IdentityOfRx, IdentityOfSimple};
 use for_event_bus::{Bus, CopyOfBus};
 use log::debug;
+use std::any::Any;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::time::sleep;
@@ -20,41 +20,34 @@ async fn main() {
 }
 
 #[derive(Debug)]
-enum Event<E, C> where E: Any + Send + Sync + 'static, C: Any + Send + Sync + 'static  {
-    Event(E),
-    Command(C)
-}
-#[derive(Debug)]
 struct AEvent;
 #[derive(Debug)]
 struct Close;
 
 struct Worker {
-    identity: IdentityOfSimple<Event<AEvent, Close>>,
+    identity: IdentityOfRx,
 }
 
 impl Worker {
     pub async fn init(bus: &CopyOfBus) {
-        let identity = bus.simple_login().await.unwrap();
+        let identity = bus.login().await.unwrap();
         Self { identity }.run();
     }
     fn run(mut self) {
         spawn(async move {
-            while let Ok(event) = self.identity.recv().await {
-                match event.as_ref() {
-                    Event::Event(event) => {
-                        debug!("WorkerA recv {:?}", event);
-                    }
-                    Event::Command(_) => {
-                        debug!("recv close");
-                        break;
-                    }
+            self.identity.subscribe::<AEvent>().unwrap();
+            self.identity.subscribe::<Close>().unwrap();
+            while let Ok(event) = self.identity.recv_event().await {
+                if let Ok(msg) = event.clone().downcast::<AEvent>() {
+                    debug!("recv {:?}", msg);
+                } else if let Ok(msg) = event.clone().downcast::<Close>() {
+                    debug!("recv close");
+                    break;
                 }
             }
         });
     }
 }
-
 
 struct WorkerDispatcher {
     identity: IdentityOfSimple<()>,
@@ -67,8 +60,8 @@ impl WorkerDispatcher {
     }
     fn run(self) {
         spawn(async move {
-            self.identity.dispatch_event(Event::<AEvent, Close>::Event(AEvent)).unwrap();
-            self.identity.dispatch_event(Event::<AEvent, Close>::Command(Close)).unwrap();
+            self.identity.dispatch_event(AEvent).unwrap();
+            self.identity.dispatch_event(Close).unwrap();
         });
     }
 }
