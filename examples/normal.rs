@@ -1,5 +1,6 @@
-use for_event_bus::worker::{IdentityOfRx, IdentityOfSimple};
-use for_event_bus::{Bus, CopyOfBus};
+use for_event_bus::bus::{Bus, EntryOfBus};
+use for_event_bus::identity::simple::IdentityOfSimple;
+use for_event_bus::identity::IdentityOfRx;
 use log::debug;
 use std::any::Any;
 use std::time::Duration;
@@ -29,7 +30,7 @@ struct Worker {
 }
 
 impl Worker {
-    pub async fn init(bus: &CopyOfBus) {
+    pub async fn init(bus: &EntryOfBus) {
         let identity = bus.login().await.unwrap();
         Self { identity }.run();
     }
@@ -54,7 +55,7 @@ struct WorkerDispatcher {
 }
 
 impl WorkerDispatcher {
-    pub async fn init(bus: &CopyOfBus) {
+    pub async fn init(bus: &EntryOfBus) {
         let identity = bus.simple_login().await.unwrap();
         Self { identity }.run();
     }

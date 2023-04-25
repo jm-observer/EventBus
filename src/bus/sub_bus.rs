@@ -1,26 +1,26 @@
-use crate::worker::{Subscriber, WorkerId};
-use crate::Event;
+use crate::bus::Event;
 use log::{debug, error};
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 
+use crate::worker::{Worker, WorkerId};
 use tokio::spawn;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 pub(crate) enum SubBusData {
-    Subscribe(Subscriber),
+    Subscribe(Worker),
     Unsubscribe(WorkerId),
     Event(Event),
     Drop,
 }
 #[allow(dead_code)]
-pub(crate) struct CopyOfSubBus {
+pub(crate) struct EntryOfSubBus {
     type_id: TypeId,
     subscribers: HashSet<WorkerId>,
     tx: UnboundedSender<SubBusData>,
 }
 
-impl Drop for CopyOfSubBus {
+impl Drop for EntryOfSubBus {
     fn drop(&mut self) {
         if self.tx.send(SubBusData::Drop).is_err() {
             error!("{:?} send SubBusData::Drop fail", self.type_id);
@@ -28,14 +28,14 @@ impl Drop for CopyOfSubBus {
     }
 }
 
-impl CopyOfSubBus {
+impl EntryOfSubBus {
     pub async fn send_event(&self, event: Event) {
         if self.tx.send(SubBusData::Event(event)).is_err() {
             error!("fail to send event to sub bus");
         }
     }
 
-    pub async fn send_subscribe(&mut self, subscriber: Subscriber) {
+    pub async fn send_subscribe(&mut self, subscriber: Worker) {
         self.subscribers.insert(subscriber.id());
         if self.tx.send(SubBusData::Subscribe(subscriber)).is_err() {
             error!("fail to send subscribe to sub bus");
@@ -54,11 +54,11 @@ impl CopyOfSubBus {
 pub struct SubBus {
     type_id: TypeId,
     rx: UnboundedReceiver<SubBusData>,
-    subscribers: HashMap<WorkerId, Subscriber>,
+    subscribers: HashMap<WorkerId, Worker>,
 }
 
 impl SubBus {
-    pub(crate) fn init(type_id: TypeId) -> CopyOfSubBus {
+    pub(crate) fn init(type_id: TypeId) -> EntryOfSubBus {
         let (tx, rx) = unbounded_channel();
         Self {
             type_id,
@@ -66,7 +66,7 @@ impl SubBus {
             subscribers: Default::default(),
         }
         .run();
-        CopyOfSubBus {
+        EntryOfSubBus {
             type_id,
             subscribers: Default::default(),
             tx,

@@ -1,5 +1,5 @@
-use for_event_bus::worker::IdentityOfSimple;
-use for_event_bus::{Bus, CopyOfBus};
+use for_event_bus::bus::{Bus, EntryOfBus};
+use for_event_bus::identity::simple::IdentityOfSimple;
 use log::LevelFilter::Info;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -33,7 +33,7 @@ struct Worker {
 }
 
 impl Worker {
-    pub async fn init(bus: &CopyOfBus, barrier: Arc<Barrier>) {
+    pub async fn init(bus: &EntryOfBus, barrier: Arc<Barrier>) {
         let identity = bus.simple_login().await.unwrap();
         Self { identity, barrier }.run();
     }
@@ -60,7 +60,7 @@ struct WorkerDispatcher {
 }
 
 impl WorkerDispatcher {
-    pub async fn init(bus: &CopyOfBus, barrier: Arc<Barrier>) {
+    pub async fn init(bus: &EntryOfBus, barrier: Arc<Barrier>) {
         let identity = bus.simple_login().await.unwrap();
         Self { identity, barrier }.run();
     }

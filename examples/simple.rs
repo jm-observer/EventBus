@@ -1,7 +1,7 @@
-use std::any::Any;
-use for_event_bus::worker::{IdentityOfSimple};
-use for_event_bus::{Bus, CopyOfBus};
+use for_event_bus::{EntryOfBus, ToWorker};
+use for_event_bus::{EventBus, IdentityOfSimple};
 use log::debug;
+use std::any::Any;
 use std::time::Duration;
 use tokio::spawn;
 use tokio::time::sleep;
@@ -11,7 +11,7 @@ async fn main() {
     // log
     custom_utils::logger::logger_stdout_debug();
     // init event bus
-    let copy_of_bus = Bus::init();
+    let copy_of_bus = EventBus::init();
     // init worker and subscribe event
     Worker::init(&copy_of_bus).await;
     // init worker and dispatcher event
@@ -20,9 +20,13 @@ async fn main() {
 }
 
 #[derive(Debug)]
-enum Event<E, C> where E: Any + Send + Sync + 'static, C: Any + Send + Sync + 'static  {
+enum Event<E, C>
+where
+    E: Any + Send + Sync + 'static,
+    C: Any + Send + Sync + 'static,
+{
     Event(E),
-    Command(C)
+    Command(C),
 }
 #[derive(Debug)]
 struct AEvent;
@@ -33,9 +37,18 @@ struct Worker {
     identity: IdentityOfSimple<Event<AEvent, Close>>,
 }
 
+impl ToWorker for Worker {
+    fn name() -> String {
+        "Worker".to_string()
+    }
+}
+
 impl Worker {
-    pub async fn init(bus: &CopyOfBus) {
-        let identity = bus.simple_login().await.unwrap();
+    pub async fn init(bus: &EntryOfBus) {
+        let identity = bus
+            .simple_login::<Self, Event<AEvent, Close>>()
+            .await
+            .unwrap();
         Self { identity }.run();
     }
     fn run(mut self) {
@@ -55,20 +68,31 @@ impl Worker {
     }
 }
 
-
 struct WorkerDispatcher {
     identity: IdentityOfSimple<()>,
 }
 
+impl ToWorker for WorkerDispatcher {
+    fn name() -> String {
+        "WorkerDispatcher".to_string()
+    }
+}
+
 impl WorkerDispatcher {
-    pub async fn init(bus: &CopyOfBus) {
-        let identity = bus.simple_login().await.unwrap();
+    pub async fn init(bus: &EntryOfBus) {
+        let identity = bus.simple_login::<Self, ()>().await.unwrap();
         Self { identity }.run();
     }
     fn run(self) {
         spawn(async move {
-            self.identity.dispatch_event(Event::<AEvent, Close>::Event(AEvent)).unwrap();
-            self.identity.dispatch_event(Event::<AEvent, Close>::Command(Close)).unwrap();
+            self.identity
+                .dispatch_event(Event::<AEvent, Close>::Event(AEvent))
+                .await
+                .unwrap();
+            self.identity
+                .dispatch_event(Event::<AEvent, Close>::Command(Close))
+                .await
+                .unwrap();
         });
     }
 }

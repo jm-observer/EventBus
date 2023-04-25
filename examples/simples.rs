@@ -1,5 +1,6 @@
-use for_event_bus::worker::{IdentityOfRx, IdentityOfSimple, IdentityOfTx};
-use for_event_bus::{Bus, CopyOfBus};
+use for_event_bus::bus::{Bus, EntryOfBus};
+use for_event_bus::identity::simple::IdentityOfSimple;
+use for_event_bus::identity::{IdentityOfRx, IdentityOfTx};
 use log::debug;
 use std::any::Any;
 use std::time::Duration;
@@ -40,13 +41,13 @@ enum MergeEvent {
 }
 
 trait Merge {
-    fn merge(event: for_event_bus::Event) -> Result<Self, ()>
+    fn merge(event: for_event_bus::bus::Event) -> Result<Self, ()>
     where
         Self: Sized;
 }
 
 impl Merge for MergeEvent {
-    fn merge(event: for_event_bus::Event) -> Result<Self, ()> {
+    fn merge(event: for_event_bus::bus::Event) -> Result<Self, ()> {
         if let Ok(a_event) = event.clone().downcast::<AEvent>() {
             Ok(Self::AEvent(a_event.as_ref().clone()))
         } else if let Ok(a_event) = event.clone().downcast::<Close>() {
@@ -62,7 +63,7 @@ struct Worker {
 }
 
 impl Worker {
-    pub async fn init(bus: &CopyOfBus) {
+    pub async fn init(bus: &EntryOfBus) {
         let identity = bus.login().await.unwrap();
         identity.subscribe::<AEvent>().unwrap();
         identity.subscribe::<Close>().unwrap();
@@ -84,7 +85,7 @@ struct WorkerDispatcher {
 }
 
 impl WorkerDispatcher {
-    pub async fn init(bus: &CopyOfBus) {
+    pub async fn init(bus: &EntryOfBus) {
         let identity = bus.simple_login().await.unwrap();
         Self { identity }.run();
     }
