@@ -1,12 +1,12 @@
-use crate::bus::{BusData, BusError, Event};
+use crate::bus::{BusError};
 use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfTx};
-use crate::worker::WorkerId;
-use log::error;
-use std::any::{Any, TypeId};
+
+
+use std::any::{Any};
 use std::marker::PhantomData;
 use std::sync::Arc;
-use tokio::sync::mpsc::error::TryRecvError;
-use tokio::sync::mpsc::{Receiver, Sender};
+
+
 
 /// 简单的worker身份标识，只订阅一种事件
 pub struct IdentityOfSimple<T> {

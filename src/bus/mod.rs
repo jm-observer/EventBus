@@ -17,6 +17,7 @@ pub type Event = Arc<dyn Any + Send + Sync + 'static>;
 #[derive(Debug)]
 pub enum BusError {
     ChannelErr,
+    DowncastErr,
 }
 
 impl<T> From<SendError<T>> for BusError {
@@ -58,6 +59,16 @@ impl EntryOfBus {
         let rx: IdentityOfSimple<T> = rx.await?.into();
         rx.subscribe().await?;
         Ok(rx)
+    }
+    pub async fn merge_login<W: ToWorker, T: Any + Send + Sync + 'static>(
+        &self,
+    ) -> Result<IdentityOfSimple<T>, BusError> {
+        todo!()
+        // let (tx, rx) = oneshot::channel();
+        // self.tx.send(BusData::SimpleLogin(tx, W::name())).await?;
+        // let rx: IdentityOfSimple<T> = rx.await?.into();
+        // rx.subscribe().await?;
+        // Ok(rx)
     }
 }
 

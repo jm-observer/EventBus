@@ -103,33 +103,36 @@ impl IdentityOfRx {
         &mut self.rx_event
     }
     pub async fn recv_event(&mut self) -> Result<Event, BusError> {
-        if let Some(event) = self.rx_event.recv().await {
-            return Ok(event);
-        }
-        Err(BusError::ChannelErr)
+        Ok(self.rx_event.recv().await.ok_or(BusError::ChannelErr)?)
     }
     pub async fn recv<T: Send + Sync + 'static>(&mut self) -> Result<Arc<T>, BusError> {
-        if let Some(event) = self.rx_event.recv().await {
-            if let Ok(msg) = event.downcast::<T>() {
-                return Ok(msg);
-            }
+        if let Ok(msg) = self.recv_event().await?.downcast::<T>() {
+            return Ok(msg);
+        } else {
+            Err(BusError::DowncastErr)
         }
-        Err(BusError::ChannelErr)
     }
 
-    pub fn try_recv<T: Send + Sync + 'static>(&mut self) -> Result<Option<Arc<T>>, BusError> {
+    pub fn try_recv_event(&mut self) -> Result<Option<Event>, BusError> {
         match self.rx_event.try_recv() {
-            Ok(event) => {
-                if let Ok(msg) = event.downcast::<T>() {
-                    Ok(Some(msg))
-                } else {
-                    Ok(None)
-                }
-            }
+            Ok(event) => Ok(Some(event)),
             Err(err) => match err {
                 TryRecvError::Empty => Ok(None),
                 TryRecvError::Disconnected => Err(BusError::ChannelErr),
             },
+        }
+    }
+
+    pub fn try_recv<T: Send + Sync + 'static>(&mut self) -> Result<Option<Arc<T>>, BusError> {
+        match self.try_recv_event()? {
+            Some(event) => {
+                if let Ok(msg) = event.downcast::<T>() {
+                    Ok(Some(msg))
+                } else {
+                    Err(BusError::DowncastErr)
+                }
+            }
+            None => Ok(None),
         }
     }
 
