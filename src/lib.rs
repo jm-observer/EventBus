@@ -6,7 +6,7 @@ mod worker;
 
 pub use bus::{Bus, BusError, EntryOfBus, Event};
 pub use worker::{
-    identity::{IdentityOfMerge, IdentityOfSimple, Merge},
+    identity::{IdentityOfMerge, IdentityOfRx, IdentityOfSimple, Merge},
     ToWorker,
 };
 

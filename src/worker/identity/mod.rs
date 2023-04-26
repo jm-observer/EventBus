@@ -1,6 +1,6 @@
 use crate::bus::{BusData, BusError, Event};
 use crate::worker::WorkerId;
-use log::{debug, error};
+use log::debug;
 use std::any::{Any, TypeId};
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;

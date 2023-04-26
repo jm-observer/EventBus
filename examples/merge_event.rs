@@ -43,7 +43,7 @@ impl Merge for MergeEvent {
         } else if let Ok(a_event) = event.clone().downcast::<Close>() {
             Ok(Self::Close(a_event.as_ref().clone()))
         } else {
-            Err(BusError::ChannelErr)
+            Err(BusError::DowncastErr)
         }
     }
 
