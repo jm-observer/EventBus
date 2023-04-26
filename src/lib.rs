@@ -4,7 +4,10 @@
 mod bus;
 mod worker;
 
-pub use bus::{Bus, EntryOfBus};
-pub use worker::{identity::IdentityOfSimple, ToWorker};
+pub use bus::{Bus, BusError, EntryOfBus, Event};
+pub use worker::{
+    identity::{IdentityOfMerge, IdentityOfSimple, Merge},
+    ToWorker,
+};
 
-pub type EventBus = Bus<1000>;
+pub type SimpleBus = Bus<1000>;

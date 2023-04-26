@@ -1,5 +1,5 @@
 use for_event_bus::{EntryOfBus, ToWorker};
-use for_event_bus::{EventBus, IdentityOfSimple};
+use for_event_bus::{IdentityOfSimple, SimpleBus};
 use log::debug;
 use std::any::Any;
 use std::time::Duration;
@@ -11,7 +11,7 @@ async fn main() {
     // log
     custom_utils::logger::logger_stdout_debug();
     // init event bus
-    let copy_of_bus = EventBus::init();
+    let copy_of_bus = SimpleBus::init();
     // init worker and subscribe event
     Worker::init(&copy_of_bus).await;
     // init worker and dispatcher event

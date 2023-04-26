@@ -13,7 +13,6 @@ use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfTx};
 
 use std::any::{Any, TypeId};
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 /// 简单的worker身份标识，只订阅一种事件
 pub struct IdentityOfMerge<T: Merge> {

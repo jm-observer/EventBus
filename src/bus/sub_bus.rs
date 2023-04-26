@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::worker::{Worker, WorkerId};
 use tokio::spawn;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub(crate) enum SubBusData {
     Subscribe(Worker),
@@ -17,49 +17,65 @@ pub(crate) enum SubBusData {
 pub(crate) struct EntryOfSubBus {
     type_id: TypeId,
     subscribers: HashSet<WorkerId>,
-    tx: UnboundedSender<SubBusData>,
+    tx: Sender<SubBusData>,
 }
 
-impl Drop for EntryOfSubBus {
-    fn drop(&mut self) {
-        if self.tx.send(SubBusData::Drop).is_err() {
-            error!("{:?} send SubBusData::Drop fail", self.type_id);
-        }
-    }
-}
+// impl Drop for EntryOfSubBus {
+//     fn drop(&mut self) {
+//         if self.tx.try_send(SubBusData::Drop).is_err() {
+//             error!("{:?} send SubBusData::Drop fail", self.type_id);
+//         }
+//     }
+// }
 
 impl EntryOfSubBus {
     pub async fn send_event(&self, event: Event) {
-        if self.tx.send(SubBusData::Event(event)).is_err() {
+        if self.tx.send(SubBusData::Event(event)).await.is_err() {
             error!("fail to send event to sub bus");
         }
     }
 
     pub async fn send_subscribe(&mut self, subscriber: Worker) {
         self.subscribers.insert(subscriber.id());
-        if self.tx.send(SubBusData::Subscribe(subscriber)).is_err() {
+        if self
+            .tx
+            .send(SubBusData::Subscribe(subscriber))
+            .await
+            .is_err()
+        {
             error!("fail to send subscribe to sub bus");
         }
     }
     pub async fn send_unsubscribe(&mut self, worker_id: WorkerId) -> usize {
         self.subscribers.remove(&worker_id);
-        if self.tx.send(SubBusData::Unsubscribe(worker_id)).is_err() {
+        if self
+            .tx
+            .send(SubBusData::Unsubscribe(worker_id))
+            .await
+            .is_err()
+        {
             error!("fail to send subscribe to sub bus");
         }
         self.subscribers.len()
     }
+
+    pub async fn send_drop(&self) {
+        if self.tx.send(SubBusData::Drop).await.is_err() {
+            error!("fail to send drop to sub bus");
+        }
+    }
 }
 #[allow(dead_code)]
 /// 子事件总线
-pub struct SubBus {
+pub struct SubBus<const CAP: usize> {
     type_id: TypeId,
-    rx: UnboundedReceiver<SubBusData>,
+    rx: Receiver<SubBusData>,
     subscribers: HashMap<WorkerId, Worker>,
 }
 
-impl SubBus {
+impl<const CAP: usize> SubBus<CAP> {
     pub(crate) fn init(type_id: TypeId) -> EntryOfSubBus {
-        let (tx, rx) = unbounded_channel();
+        let (tx, rx) = channel(CAP);
         Self {
             type_id,
             rx,

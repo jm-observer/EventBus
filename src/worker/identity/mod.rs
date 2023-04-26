@@ -1,6 +1,6 @@
 use crate::bus::{BusData, BusError, Event};
 use crate::worker::WorkerId;
-use log::error;
+use log::{debug, error};
 use std::any::{Any, TypeId};
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -9,6 +9,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 mod merge;
 mod simple;
 
+pub use merge::{IdentityOfMerge, Merge};
 pub use simple::IdentityOfSimple;
 
 #[derive(Clone)]
@@ -56,7 +57,7 @@ impl Drop for IdentityOfRx {
             .try_send(BusData::Drop(self.id.clone()))
             .is_err()
         {
-            error!("{:?} send BusData::Drop fail", self.id);
+            debug!("{:?} send BusData::Drop fail", self.id);
         }
     }
 }

@@ -1,6 +1,7 @@
 use crate::bus::sub_bus::{EntryOfSubBus, SubBus};
 use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfSimple};
 use crate::worker::{CopyOfWorker, ToWorker, WorkerId};
+use crate::{IdentityOfMerge, Merge};
 use log::{debug, error};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -34,7 +35,7 @@ impl From<oneshot::error::RecvError> for BusError {
 
 pub enum BusData {
     Login(oneshot::Sender<IdentityCommon>, String),
-    SimpleLogin(oneshot::Sender<IdentityCommon>, String),
+    // SimpleLogin(oneshot::Sender<IdentityCommon>, String),
     Subscribe(WorkerId, TypeId),
     DispatchEvent(WorkerId, Event),
     Drop(WorkerId),
@@ -55,20 +56,19 @@ impl EntryOfBus {
         &self,
     ) -> Result<IdentityOfSimple<T>, BusError> {
         let (tx, rx) = oneshot::channel();
-        self.tx.send(BusData::SimpleLogin(tx, W::name())).await?;
+        self.tx.send(BusData::Login(tx, W::name())).await?;
         let rx: IdentityOfSimple<T> = rx.await?.into();
         rx.subscribe().await?;
         Ok(rx)
     }
-    pub async fn merge_login<W: ToWorker, T: Any + Send + Sync + 'static>(
+    pub async fn merge_login<W: ToWorker, T: Any + Send + Sync + 'static + Merge>(
         &self,
-    ) -> Result<IdentityOfSimple<T>, BusError> {
-        todo!()
-        // let (tx, rx) = oneshot::channel();
-        // self.tx.send(BusData::SimpleLogin(tx, W::name())).await?;
-        // let rx: IdentityOfSimple<T> = rx.await?.into();
-        // rx.subscribe().await?;
-        // Ok(rx)
+    ) -> Result<IdentityOfMerge<T>, BusError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(BusData::Login(tx, W::name())).await?;
+        let rx: IdentityOfMerge<T> = rx.await?.into();
+        rx.subscribe().await?;
+        Ok(rx)
     }
 }
 
@@ -77,6 +77,12 @@ pub struct Bus<const CAP: usize> {
     tx: Sender<BusData>,
     workers: HashMap<WorkerId, CopyOfWorker>,
     sub_buses: HashMap<TypeId, EntryOfSubBus>,
+}
+
+impl<const CAP: usize> Drop for Bus<CAP> {
+    fn drop(&mut self) {
+        debug!("bus drop");
+    }
 }
 
 impl<const CAP: usize> Bus<CAP> {
@@ -102,13 +108,6 @@ impl<const CAP: usize> Bus<CAP> {
                             error!("login fail: tx ack fail");
                         }
                     }
-                    BusData::SimpleLogin(tx, name) => {
-                        let (identity_rx, copy_of_worker) = self.init_worker(name);
-                        self.workers.insert(copy_of_worker.id(), copy_of_worker);
-                        if tx.send(identity_rx).is_err() {
-                            error!("login fail: tx ack fail");
-                        }
-                    }
                     BusData::Drop(worker_id) => {
                         debug!("{:?} Drop", worker_id);
                         if let Some(worker) = self.workers.remove(&worker_id) {
@@ -121,7 +120,9 @@ impl<const CAP: usize> Bus<CAP> {
                                         false
                                     };
                                 if should_remove {
-                                    self.sub_buses.remove(ty_id);
+                                    if let Some(sub_bus) = self.sub_buses.remove(ty_id) {
+                                        sub_bus.send_drop().await;
+                                    }
                                 }
                             }
                         } else {
@@ -145,7 +146,7 @@ impl<const CAP: usize> Bus<CAP> {
                             if let Some(sub_buses) = self.sub_buses.get_mut(&typeid) {
                                 sub_buses.send_subscribe(worker.init_subscriber()).await;
                             } else {
-                                let mut copy = SubBus::init(typeid);
+                                let mut copy = SubBus::<CAP>::init(typeid);
                                 copy.send_subscribe(worker.init_subscriber()).await;
                                 self.sub_buses.insert(typeid, copy);
                             }
