@@ -10,4 +10,6 @@ pub use worker::{
     ToWorker,
 };
 
+pub use for_event_bus_derive::Merge;
+
 pub type SimpleBus = Bus<1000>;

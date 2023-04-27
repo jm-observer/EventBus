@@ -3,6 +3,13 @@ name = "for-event-bus-derive"
 version = "0.1.0"
 edition = "2021"
 
+license-file = "../LICENSE"
+readme = "../README.md"
+
+include = [
+    "../LICENSE", "Cargo.toml", "README.md", "src/**/*.rs"
+]
+
 [lib]
 proc-macro = true
 

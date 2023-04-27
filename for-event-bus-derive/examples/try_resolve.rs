@@ -16,6 +16,7 @@ enum MergeEvent {
         if let Item::Enum(item_enum) = item {
             let ident = item_enum.ident;
             debug!("{:?}", ident);
+            let mut tokens = Vec::new();
             for var in item_enum.variants {
                 let var_ident = var.ident;
                 debug!("{}", var_ident);
@@ -25,26 +26,29 @@ enum MergeEvent {
                         let segments = path.path.segments;
                         debug!("{:?}", segments);
 
-                        let end = quote!(
-                            impl Merge for #ident {
-                                fn merge(event: for_event_bus::Event) -> Result<Self, BusError>
-                                where
-                                    Self: Sized,
-                                {
-                                    if let Ok(a_event) = event.clone().downcast::<#segments>() {
-                                        Ok(Self::#var_ident(a_event.as_ref().clone()))
-                                    }
-
-                                }
-                            }
-                        );
-
-                        let formatted =
-                            prettyplease::unparse(&parse_file(end.to_string()).await.unwrap());
-                        debug!("{}", formatted);
+                        tokens.push(quote!(
+                        if let Ok(a_event) = event.clone().downcast::<#segments>() {
+                            Ok(Self::#var_ident(a_event.as_ref().clone()))
+                        }));
                     }
                 }
             }
+
+            let end = quote!(
+                impl Merge for #ident {
+                    fn merge(event: for_event_bus::Event) -> Result<Self, BusError>
+                    where
+                        Self: Sized,
+                    {
+                        #(#tokens)else* else {
+                            Err(BusError::DowncastErr)
+                        }
+                    }
+                }
+            );
+
+            let formatted = prettyplease::unparse(&parse_file(end.to_string()).await.unwrap());
+            debug!("{}", formatted);
         }
     }
 }

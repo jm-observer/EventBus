@@ -5,21 +5,21 @@ edition = "2021"
 description = "a event bus"
 repository = "https://github.com/jm-observer/for_event_bus"
 
-license-file = "LICENSE"
-readme = "README.md"
+license-file = "../LICENSE"
+readme = "../README.md"
 
 include = [
-    "LICENSE", "Cargo.toml", "README.md", "src/**/*.rs"
+    "../LICENSE", "Cargo.toml", "README.md", "src/**/*.rs"
 ]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tokio = {version="1.26.0", features = ["sync", "rt"]}
 log = "0.4.17"
-#anyhow = "1.0.69"
-#async-trait = "0.1.66"
+for-event-bus-derive = { path = "../for-event-bus-derive"}
 
 [dev-dependencies]
 custom-utils = { version = "0.10.14"}
 tokio = {version="1.26.0", features = ["full"]}
+
 
