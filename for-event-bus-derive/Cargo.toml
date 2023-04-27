@@ -2,12 +2,14 @@
 name = "for-event-bus-derive"
 version = "0.1.0"
 edition = "2021"
+description = "a derive crate for for-event-bus"
+repository = "https://github.com/jm-observer/for_event_bus"
 
 license-file = "../LICENSE"
 readme = "../README.md"
 
 include = [
-    "../LICENSE", "Cargo.toml", "README.md", "src/**/*.rs"
+    "Cargo.toml", "README.md", "src/lib.rs"
 ]
 
 [lib]
