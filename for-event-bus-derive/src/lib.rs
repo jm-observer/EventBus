@@ -5,10 +5,10 @@ use syn::{Item, Type};
 
 #[proc_macro_derive(Merge)]
 pub fn merge_derive(input: TokenStream) -> TokenStream {
-    general(input.into()).unwrap().into()
+    general_merge(input.into()).unwrap().into()
 }
 
-fn general(code: TokenStream2) -> Result<TokenStream2, String> {
+fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
     if let Ok(Item::Enum(item_enum)) = syn::parse2(code) {
         let ident = item_enum.ident;
         let mut tokens = Vec::new();
@@ -55,4 +55,30 @@ fn general(code: TokenStream2) -> Result<TokenStream2, String> {
     } else {
         Err("only support enum to merge event!".to_string())
     }
+}
+
+
+
+#[proc_macro_derive(Worker)]
+pub fn worker_derive(input: TokenStream) -> TokenStream {
+    general_worker(input.into()).unwrap().into()
+}
+
+fn general_worker(code: TokenStream2) -> Result<TokenStream2, String> {
+    let ident = if let Ok(Item::Struct(item_enum)) = syn::parse2(code.clone()) {
+        item_enum.ident
+    } else if let Ok(Item::Enum(item_enum)) = syn::parse2(code) {
+        item_enum.ident
+    } else {
+        return Err("only support enum/struct to merge event!".to_string())
+    };
+    let name = ident.to_string();
+    let end = quote!(
+                impl ToWorker for #ident {
+                    fn name() -> String {
+                        #name.to_string()
+                    }
+                }
+            );
+    Ok(end)
 }

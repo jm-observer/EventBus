@@ -1,4 +1,4 @@
-use for_event_bus::{BusError, IdentityOfSimple, Merge, ToWorker};
+use for_event_bus::{BusError, IdentityOfSimple, Merge, ToWorker, Worker};
 use for_event_bus::{EntryOfBus, IdentityOfMerge, SimpleBus};
 use log::debug;
 use std::any::TypeId;
@@ -14,7 +14,7 @@ async fn main() {
     let copy_of_bus = SimpleBus::init();
     // init worker and subscribe event
     {
-        Worker::init(&copy_of_bus).await;
+        WorkerA::init(&copy_of_bus).await;
         // init worker and dispatcher event
         WorkerDispatcher::init(&copy_of_bus).await;
         sleep(Duration::from_secs(5)).await
@@ -33,19 +33,20 @@ enum MergeEvent {
     Close(Close),
 }
 
-struct Worker {
+#[derive(Worker)]
+struct WorkerA {
     identity: IdentityOfMerge<MergeEvent>,
 }
 
-impl ToWorker for Worker {
-    fn name() -> String {
-        "Worker".to_string()
-    }
-}
+// impl ToWorker for Worker {
+//     fn name() -> String {
+//         "Worker".to_string()
+//     }
+// }
 
-impl Worker {
+impl WorkerA {
     pub async fn init(bus: &EntryOfBus) {
-        let identity = bus.merge_login::<Worker, MergeEvent>().await.unwrap();
+        let identity = bus.merge_login::<WorkerA, MergeEvent>().await.unwrap();
         Self { identity }.run();
     }
     fn run(mut self) {
