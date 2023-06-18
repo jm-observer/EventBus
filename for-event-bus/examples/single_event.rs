@@ -1,4 +1,4 @@
-use for_event_bus::{EntryOfBus, ToWorker};
+use for_event_bus::{BusEvent, EntryOfBus, Event, ToWorker};
 use for_event_bus::{IdentityOfSimple, SimpleBus};
 use log::debug;
 use std::any::Any;
@@ -19,22 +19,22 @@ async fn main() {
     sleep(Duration::from_secs(5)).await
 }
 
-#[derive(Debug)]
-enum Event<E, C>
+#[derive(Debug, Event)]
+enum OneEvent<E, C>
 where
-    E: Any + Send + Sync + 'static,
-    C: Any + Send + Sync + 'static,
+    E: Event,
+    C: Event,
 {
     Event(E),
     Command(C),
 }
-#[derive(Debug)]
+#[derive(Debug, Event)]
 struct AEvent;
-#[derive(Debug)]
+#[derive(Debug, Event)]
 struct Close;
 
 struct Worker {
-    identity: IdentityOfSimple<Event<AEvent, Close>>,
+    identity: IdentityOfSimple<OneEvent<AEvent, Close>>,
 }
 
 impl ToWorker for Worker {
@@ -46,7 +46,7 @@ impl ToWorker for Worker {
 impl Worker {
     pub async fn init(bus: &EntryOfBus) {
         let identity = bus
-            .simple_login::<Self, Event<AEvent, Close>>()
+            .simple_login::<Self, OneEvent<AEvent, Close>>()
             .await
             .unwrap();
         Self { identity }.run();
@@ -55,10 +55,10 @@ impl Worker {
         spawn(async move {
             while let Ok(event) = self.identity.recv().await {
                 match event.as_ref() {
-                    Event::Event(event) => {
+                    BusEvent::Event(event) => {
                         debug!("WorkerA recv {:?}", event);
                     }
-                    Event::Command(_) => {
+                    BusEvent::Command(_) => {
                         debug!("recv close");
                         break;
                     }
@@ -86,11 +86,11 @@ impl WorkerDispatcher {
     fn run(self) {
         spawn(async move {
             self.identity
-                .dispatch_event(Event::<AEvent, Close>::Event(AEvent))
+                .dispatch_event(BusEvent::<AEvent, Close>::Event(AEvent))
                 .await
                 .unwrap();
             self.identity
-                .dispatch_event(Event::<AEvent, Close>::Command(Close))
+                .dispatch_event(BusEvent::<AEvent, Close>::Command(Close))
                 .await
                 .unwrap();
         });

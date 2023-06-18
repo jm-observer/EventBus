@@ -1,12 +1,9 @@
-use crate::bus::{BusError};
+use crate::bus::BusError;
 use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfTx};
 
-
-use std::any::{Any};
+use crate::Event;
 use std::marker::PhantomData;
 use std::sync::Arc;
-
-
 
 /// 简单的worker身份标识，只订阅一种事件
 pub struct IdentityOfSimple<T> {
@@ -33,7 +30,7 @@ impl<T> From<IdentityCommon> for IdentityOfSimple<T> {
     }
 }
 
-impl<T: Any + Send + Sync + 'static> IdentityOfSimple<T> {
+impl<T: Event> IdentityOfSimple<T> {
     pub fn tx(&self) -> IdentityOfTx {
         IdentityOfTx {
             id: self.id.id.clone(),
@@ -51,10 +48,7 @@ impl<T: Any + Send + Sync + 'static> IdentityOfSimple<T> {
         Ok(self.id.subscribe::<T>().await?)
     }
 
-    pub async fn dispatch_event<E: Any + Send + Sync + 'static>(
-        &self,
-        event: E,
-    ) -> Result<(), BusError> {
+    pub async fn dispatch_event<E: Event>(&self, event: E) -> Result<(), BusError> {
         Ok(self.id.dispatch_event(event).await?)
     }
 }

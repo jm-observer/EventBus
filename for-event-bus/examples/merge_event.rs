@@ -1,3 +1,4 @@
+use for_event_bus::{upcast, Event};
 use for_event_bus::{BusError, IdentityOfSimple, Merge, ToWorker};
 use for_event_bus::{EntryOfBus, IdentityOfMerge, SimpleBus};
 use log::debug;
@@ -22,22 +23,23 @@ async fn main() {
     sleep(Duration::from_secs(5)).await
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 struct AEvent;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 struct Close;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 enum MergeEvent {
     AEvent(AEvent),
     Close(Close),
 }
 
 impl Merge for MergeEvent {
-    fn merge(event: for_event_bus::Event) -> Result<Self, BusError>
+    fn merge(event: for_event_bus::BusEvent) -> Result<Self, BusError>
     where
         Self: Sized,
     {
+        let event = upcast(event);
         if let Ok(a_event) = event.clone().downcast::<AEvent>() {
             Ok(Self::AEvent(a_event.as_ref().clone()))
         } else if let Ok(a_event) = event.clone().downcast::<Close>() {

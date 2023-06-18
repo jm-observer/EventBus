@@ -1,4 +1,4 @@
-use for_event_bus::{BusError, IdentityOfSimple, Merge, ToWorker, Worker};
+use for_event_bus::{BusError, Event, IdentityOfSimple, Merge, ToWorker, Worker};
 use for_event_bus::{EntryOfBus, IdentityOfMerge, SimpleBus};
 use log::debug;
 use std::any::TypeId;
@@ -22,12 +22,12 @@ async fn main() {
     sleep(Duration::from_secs(5)).await
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 struct AEvent;
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Event)]
 struct Close;
 
-#[derive(Debug, Clone, Merge)]
+#[derive(Debug, Clone, Merge, Event)]
 enum MergeEvent {
     AEvent(AEvent),
     Close(Close),

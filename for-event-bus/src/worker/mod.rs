@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::bus::Event;
+use crate::bus::BusEvent;
 use tokio::sync::mpsc::Sender;
 
 pub mod identity;
@@ -29,14 +29,14 @@ impl WorkerId {
 
 pub(crate) struct Worker {
     id: WorkerId,
-    tx: Sender<Event>,
+    tx: Sender<BusEvent>,
 }
 
 impl Worker {
     pub fn id(&self) -> WorkerId {
         self.id.clone()
     }
-    pub async fn send(&self, event: Event) {
+    pub async fn send(&self, event: BusEvent) {
         if self.tx.send(event).await.is_err() {
             error!("send event to {:?} fail", self.id);
         }
@@ -44,11 +44,11 @@ impl Worker {
 }
 pub(crate) struct CopyOfWorker {
     id: WorkerId,
-    tx_event: Sender<Event>,
+    tx_event: Sender<BusEvent>,
     subscribe_events: HashSet<TypeId>,
 }
 impl CopyOfWorker {
-    pub fn init(id: WorkerId, tx_event: Sender<Event>) -> Self {
+    pub fn init(id: WorkerId, tx_event: Sender<BusEvent>) -> Self {
         Self {
             id,
             tx_event,

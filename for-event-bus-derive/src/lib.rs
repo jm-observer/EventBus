@@ -37,10 +37,12 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
 
         let end = quote!(
             impl Merge for #ident {
-                fn merge(event: for_event_bus::Event) -> Result<Self, BusError>
+                fn merge(event: for_event_bus::BusEvent) -> Result<Self, BusError>
                 where
                     Self: Sized,
                 {
+                    use for_event_bus::upcast;
+                    let event = upcast(event);
                     #(#tokens)else* else {
                         Err(BusError::DowncastErr)
                     }
@@ -57,8 +59,6 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
     }
 }
 
-
-
 #[proc_macro_derive(Worker)]
 pub fn worker_derive(input: TokenStream) -> TokenStream {
     general_worker(input.into()).unwrap().into()
@@ -70,15 +70,39 @@ fn general_worker(code: TokenStream2) -> Result<TokenStream2, String> {
     } else if let Ok(Item::Enum(item_enum)) = syn::parse2(code) {
         item_enum.ident
     } else {
-        return Err("only support enum/struct to merge event!".to_string())
+        return Err("only support enum/struct to merge event!".to_string());
     };
     let name = ident.to_string();
     let end = quote!(
-                impl ToWorker for #ident {
-                    fn name() -> String {
-                        #name.to_string()
-                    }
-                }
-            );
+        impl ToWorker for #ident {
+            fn name() -> String {
+                #name.to_string()
+            }
+        }
+    );
+    Ok(end)
+}
+
+#[proc_macro_derive(Event)]
+pub fn event_derive(input: TokenStream) -> TokenStream {
+    general_event(input.into()).unwrap().into()
+}
+
+fn general_event(code: TokenStream2) -> Result<TokenStream2, String> {
+    let ident = if let Ok(Item::Struct(item_enum)) = syn::parse2(code.clone()) {
+        item_enum.ident
+    } else if let Ok(Item::Enum(item_enum)) = syn::parse2(code) {
+        item_enum.ident
+    } else {
+        return Err("only support enum/struct to merge event!".to_string());
+    };
+    let name = ident.to_string();
+    let end = quote!(
+        impl for_event_bus::Event for #ident {
+            fn name() -> String {
+                #name.to_string()
+            }
+        }
+    );
     Ok(end)
 }

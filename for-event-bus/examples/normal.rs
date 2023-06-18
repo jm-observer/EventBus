@@ -1,4 +1,6 @@
-use for_event_bus::{EntryOfBus, IdentityOfRx, IdentityOfSimple, SimpleBus, ToWorker};
+use for_event_bus::{
+    upcast, EntryOfBus, Event, IdentityOfRx, IdentityOfSimple, SimpleBus, ToWorker,
+};
 use log::debug;
 use std::time::Duration;
 use tokio::spawn;
@@ -17,9 +19,9 @@ async fn main() {
     sleep(Duration::from_secs(5)).await
 }
 
-#[derive(Debug)]
+#[derive(Debug, Event)]
 struct AEvent;
-#[derive(Debug)]
+#[derive(Debug, Event)]
 struct Close;
 
 struct Worker {
@@ -42,9 +44,9 @@ impl Worker {
             self.identity.subscribe::<AEvent>().await.unwrap();
             self.identity.subscribe::<Close>().await.unwrap();
             while let Ok(event) = self.identity.recv_event().await {
-                if let Ok(msg) = event.clone().downcast::<AEvent>() {
+                if let Ok(msg) = upcast(event.clone()).downcast::<AEvent>() {
                     debug!("recv {:?}", msg);
-                } else if let Ok(_) = event.clone().downcast::<Close>() {
+                } else if let Ok(_) = upcast(event.clone()).downcast::<Close>() {
                     debug!("recv close");
                     break;
                 }

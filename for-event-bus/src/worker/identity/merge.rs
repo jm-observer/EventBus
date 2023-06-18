@@ -1,7 +1,7 @@
-use crate::bus::{BusData, Event};
+use crate::bus::{BusData, BusEvent};
 
 pub trait Merge {
-    fn merge(event: Event) -> Result<Self, BusError>
+    fn merge(event: BusEvent) -> Result<Self, BusError>
     where
         Self: Sized;
 
@@ -11,7 +11,8 @@ pub trait Merge {
 use crate::bus::BusError;
 use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfTx};
 
-use std::any::{Any, TypeId};
+use crate::Event;
+use std::any::TypeId;
 use std::marker::PhantomData;
 
 /// 简单的worker身份标识，只订阅一种事件
@@ -39,7 +40,7 @@ impl<T: Merge> From<IdentityCommon> for IdentityOfMerge<T> {
     }
 }
 
-impl<T: Merge + Any + Send + Sync + 'static> IdentityOfMerge<T> {
+impl<T: Merge + Event> IdentityOfMerge<T> {
     pub fn tx(&self) -> IdentityOfTx {
         IdentityOfTx {
             id: self.id.id.clone(),
@@ -68,10 +69,7 @@ impl<T: Merge + Any + Send + Sync + 'static> IdentityOfMerge<T> {
         Ok(())
     }
 
-    pub async fn dispatch_event<E: Any + Send + Sync + 'static>(
-        &self,
-        event: E,
-    ) -> Result<(), BusError> {
+    pub async fn dispatch_event<E: Event>(&self, event: E) -> Result<(), BusError> {
         Ok(self.id.dispatch_event(event).await?)
     }
 }

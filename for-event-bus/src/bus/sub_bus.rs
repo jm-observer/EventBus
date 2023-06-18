@@ -1,4 +1,4 @@
-use crate::bus::Event;
+use crate::bus::BusEvent;
 use log::{debug, error};
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
@@ -10,7 +10,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 pub(crate) enum SubBusData {
     Subscribe(Worker),
     Unsubscribe(WorkerId),
-    Event(Event),
+    Event(BusEvent),
     Drop,
 }
 #[allow(dead_code)]
@@ -29,7 +29,7 @@ pub(crate) struct EntryOfSubBus {
 // }
 
 impl EntryOfSubBus {
-    pub async fn send_event(&self, event: Event) {
+    pub async fn send_event(&self, event: BusEvent) {
         if self.tx.send(SubBusData::Event(event)).await.is_err() {
             error!("fail to send event to sub bus");
         }

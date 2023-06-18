@@ -1,7 +1,8 @@
-use crate::bus::{BusData, BusError, Event};
+use crate::bus::{BusData, BusError, BusEvent};
 use crate::worker::WorkerId;
 use log::debug;
 use std::any::{Any, TypeId};
+use std::mem;
 use std::sync::Arc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -9,6 +10,7 @@ use tokio::sync::mpsc::{Receiver, Sender};
 mod merge;
 mod simple;
 
+use crate::Event;
 pub use merge::{IdentityOfMerge, Merge};
 pub use simple::IdentityOfSimple;
 
@@ -26,10 +28,7 @@ impl IdentityOfTx {
             .await?)
     }
 
-    pub async fn dispatch_event<T: Any + Send + Sync + 'static>(
-        &self,
-        event: T,
-    ) -> Result<(), BusError> {
+    pub async fn dispatch_event<T: Event>(&self, event: T) -> Result<(), BusError> {
         Ok(self
             .tx_data
             .send(BusData::DispatchEvent(self.id.clone(), Arc::new(event)))
@@ -40,13 +39,13 @@ impl IdentityOfTx {
 /// 通用的worker身份标识，可以订阅多种事件
 pub struct IdentityOfRx {
     pub id: WorkerId,
-    pub rx_event: Receiver<Event>,
+    pub rx_event: Receiver<BusEvent>,
     pub tx_data: Sender<BusData>,
 }
 
 pub struct IdentityCommon {
     pub(crate) id: WorkerId,
-    pub(crate) rx_event: Receiver<Event>,
+    pub(crate) rx_event: Receiver<BusEvent>,
     pub(crate) tx_data: Sender<BusData>,
 }
 
@@ -100,21 +99,39 @@ impl IdentityOfRx {
     // pub async fn recv_event<T: Send + Sync + 'static>(&mut self) -> Option<T> {
     //     self.rx_event.recv().await
     // }
-    pub fn rx_event_mut(&mut self) -> &mut Receiver<Event> {
+    pub fn rx_event_mut(&mut self) -> &mut Receiver<BusEvent> {
         &mut self.rx_event
     }
-    pub async fn recv_event(&mut self) -> Result<Event, BusError> {
+
+    pub async fn recv_event(&mut self) -> Result<BusEvent, BusError> {
         Ok(self.rx_event.recv().await.ok_or(BusError::ChannelErr)?)
     }
-    pub async fn recv<T: Send + Sync + 'static>(&mut self) -> Result<Arc<T>, BusError> {
-        if let Ok(msg) = self.recv_event().await?.downcast::<T>() {
-            return Ok(msg);
-        } else {
-            Err(BusError::DowncastErr)
+    pub async fn recv<T: Event>(&mut self) -> Result<Arc<T>, BusError> {
+        match self.recv_event().await {
+            Ok(event) => {
+                let any_event: Arc<dyn Any + Send + Sync + 'static> = unsafe {
+                    mem::transmute::<Arc<dyn Event>, Arc<dyn Any + Send + Sync + 'static>>(event)
+                };
+                // let any_event: Arc<dyn Any + Send + Sync + 'static> = Arc::new(&*event);
+                if let Ok(msg) = any_event.downcast::<T>() {
+                    Ok(msg)
+                } else {
+                    Err(BusError::DowncastErr)
+                }
+            }
+            Err(e) => Err(e),
         }
+
+        // let event = self.recv_event().await?;
+        // let any_event: Arc<dyn Any + Send + Sync> = Arc::new(&*event);
+        // if let Ok(msg) = any_event.downcast::<T>() {
+        //     return Ok(msg);
+        // } else {
+        //     Err(BusError::DowncastErr)
+        // }
     }
 
-    pub fn try_recv_event(&mut self) -> Result<Option<Event>, BusError> {
+    pub fn try_recv_event(&mut self) -> Result<Option<BusEvent>, BusError> {
         match self.rx_event.try_recv() {
             Ok(event) => Ok(Some(event)),
             Err(err) => match err {
@@ -124,10 +141,14 @@ impl IdentityOfRx {
         }
     }
 
-    pub fn try_recv<T: Send + Sync + 'static>(&mut self) -> Result<Option<Arc<T>>, BusError> {
+    pub fn try_recv<T: Event>(&mut self) -> Result<Option<Arc<T>>, BusError> {
         match self.try_recv_event()? {
             Some(event) => {
-                if let Ok(msg) = event.downcast::<T>() {
+                // let any_event: Arc<dyn Any + Send + Sync + 'static> = Arc::new(&*event);
+                let any_event: Arc<dyn Any + Send + Sync + 'static> = unsafe {
+                    mem::transmute::<Arc<dyn Event>, Arc<dyn Any + Send + Sync + 'static>>(event)
+                };
+                if let Ok(msg) = any_event.downcast::<T>() {
                     Ok(Some(msg))
                 } else {
                     Err(BusError::DowncastErr)
@@ -153,10 +174,7 @@ impl IdentityOfRx {
             .await?)
     }
 
-    pub async fn dispatch_event<T: Any + Send + Sync + 'static>(
-        &self,
-        event: T,
-    ) -> Result<(), BusError> {
+    pub async fn dispatch_event<T: Event>(&self, event: T) -> Result<(), BusError> {
         Ok(self
             .tx_data
             .send(BusData::DispatchEvent(self.id.clone(), Arc::new(event)))

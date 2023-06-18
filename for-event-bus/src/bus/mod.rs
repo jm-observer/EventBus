@@ -1,9 +1,9 @@
 use crate::bus::sub_bus::{EntryOfSubBus, SubBus};
-use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfSimple};
+use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfSimple, Merge};
 use crate::worker::{CopyOfWorker, ToWorker, WorkerId};
-use crate::{IdentityOfMerge, Merge};
+use crate::{Event, IdentityOfMerge};
 use log::{debug, error};
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::spawn;
@@ -13,7 +13,7 @@ use tokio::sync::oneshot;
 
 mod sub_bus;
 
-pub type Event = Arc<dyn Any + Send + Sync + 'static>;
+pub type BusEvent = Arc<dyn Event>;
 
 #[derive(Debug)]
 pub enum BusError {
@@ -37,7 +37,7 @@ pub enum BusData {
     Login(oneshot::Sender<IdentityCommon>, String),
     // SimpleLogin(oneshot::Sender<IdentityCommon>, String),
     Subscribe(WorkerId, TypeId),
-    DispatchEvent(WorkerId, Event),
+    DispatchEvent(WorkerId, BusEvent),
     Drop(WorkerId),
 }
 
@@ -52,7 +52,7 @@ impl EntryOfBus {
         self.tx.send(BusData::Login(tx, W::name())).await?;
         Ok(rx.await?.into())
     }
-    pub async fn simple_login<W: ToWorker, T: Any + Send + Sync + 'static>(
+    pub async fn simple_login<W: ToWorker, T: Event>(
         &self,
     ) -> Result<IdentityOfSimple<T>, BusError> {
         let (tx, rx) = oneshot::channel();
@@ -61,7 +61,7 @@ impl EntryOfBus {
         rx.subscribe().await?;
         Ok(rx)
     }
-    pub async fn merge_login<W: ToWorker, T: Any + Send + Sync + 'static + Merge>(
+    pub async fn merge_login<W: ToWorker, T: Event + Merge>(
         &self,
     ) -> Result<IdentityOfMerge<T>, BusError> {
         let (tx, rx) = oneshot::channel();
