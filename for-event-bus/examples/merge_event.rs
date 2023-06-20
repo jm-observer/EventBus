@@ -49,8 +49,11 @@ impl Merge for MergeEvent {
         }
     }
 
-    fn subscribe_types() -> Vec<TypeId> {
-        vec![TypeId::of::<AEvent>(), TypeId::of::<Close>()]
+    fn subscribe_types() -> Vec<(TypeId, String)> {
+        vec![
+            (TypeId::of::<AEvent>(), AEvent::name()),
+            (TypeId::of::<Close>(), Close::name()),
+        ]
     }
 }
 

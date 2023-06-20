@@ -69,15 +69,17 @@ impl EntryOfSubBus {
 /// 子事件总线
 pub struct SubBus<const CAP: usize> {
     type_id: TypeId,
+    name: String,
     rx: Receiver<SubBusData>,
     subscribers: HashMap<WorkerId, Worker>,
 }
 
 impl<const CAP: usize> SubBus<CAP> {
-    pub(crate) fn init(type_id: TypeId) -> EntryOfSubBus {
+    pub(crate) fn init(type_id: TypeId, name: String) -> EntryOfSubBus {
         let (tx, rx) = channel(CAP);
         Self {
             type_id,
+            name,
             rx,
             subscribers: Default::default(),
         }

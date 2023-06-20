@@ -36,7 +36,7 @@ impl From<oneshot::error::RecvError> for BusError {
 pub enum BusData {
     Login(oneshot::Sender<IdentityCommon>, String),
     // SimpleLogin(oneshot::Sender<IdentityCommon>, String),
-    Subscribe(WorkerId, TypeId),
+    Subscribe(WorkerId, TypeId, String),
     DispatchEvent(WorkerId, BusEvent),
     Drop(WorkerId),
 }
@@ -139,14 +139,14 @@ impl<const CAP: usize> Bus<CAP> {
                             sub_buses.send_event(event).await;
                         }
                     }
-                    BusData::Subscribe(worker_id, typeid) => {
+                    BusData::Subscribe(worker_id, typeid, name) => {
                         debug!("Subscribe {:?} {:?}", worker_id, typeid);
                         if let Some(worker) = self.workers.get_mut(&worker_id) {
                             worker.subscribe_event(typeid);
                             if let Some(sub_buses) = self.sub_buses.get_mut(&typeid) {
                                 sub_buses.send_subscribe(worker.init_subscriber()).await;
                             } else {
-                                let mut copy = SubBus::<CAP>::init(typeid);
+                                let mut copy = SubBus::<CAP>::init(typeid, name);
                                 copy.send_subscribe(worker.init_subscriber()).await;
                                 self.sub_buses.insert(typeid, copy);
                             }

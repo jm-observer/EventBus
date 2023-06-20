@@ -21,10 +21,14 @@ pub struct IdentityOfTx {
 }
 
 impl IdentityOfTx {
-    pub async fn subscribe<T: ?Sized + 'static>(&self) -> Result<(), BusError> {
+    pub async fn subscribe<T: Event + 'static>(&self) -> Result<(), BusError> {
         Ok(self
             .tx_data
-            .send(BusData::Subscribe(self.id.clone(), TypeId::of::<T>()))
+            .send(BusData::Subscribe(
+                self.id.clone(),
+                TypeId::of::<T>(),
+                T::name(),
+            ))
             .await?)
     }
 
@@ -167,10 +171,14 @@ impl IdentityOfRx {
     //         .tx_data
     //         .send(BusData::Subscribe(self.id, worker.type_id()))?)
     // }
-    pub async fn subscribe<T: ?Sized + 'static>(&self) -> Result<(), BusError> {
+    pub async fn subscribe<T: Event + 'static>(&self) -> Result<(), BusError> {
         Ok(self
             .tx_data
-            .send(BusData::Subscribe(self.id.clone(), TypeId::of::<T>()))
+            .send(BusData::Subscribe(
+                self.id.clone(),
+                TypeId::of::<T>(),
+                T::name(),
+            ))
             .await?)
     }
 

@@ -5,7 +5,7 @@ pub trait Merge {
     where
         Self: Sized;
 
-    fn subscribe_types() -> Vec<TypeId>;
+    fn subscribe_types() -> Vec<(TypeId, String)>;
 }
 
 use crate::bus::BusError;
@@ -60,10 +60,10 @@ impl<T: Merge + Event> IdentityOfMerge<T> {
         }
     }
     pub(crate) async fn subscribe(&self) -> Result<(), BusError> {
-        for type_id in T::subscribe_types() {
+        for (type_id, name) in T::subscribe_types() {
             self.id
                 .tx_data
-                .send(BusData::Subscribe(self.id.id.clone(), type_id))
+                .send(BusData::Subscribe(self.id.id.clone(), type_id, name))
                 .await?;
         }
         Ok(())

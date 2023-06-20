@@ -24,7 +24,7 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
                     }));
 
                     type_ids.push(quote!(
-                    TypeId::of::<#segments>()
+                    (TypeId::of::<#segments>(), #segments::name())
                     ));
                 } else {
                     return Err(
@@ -48,7 +48,7 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
                     }
                 }
 
-                fn subscribe_types() -> Vec<TypeId> {
+                fn subscribe_types() -> Vec<(TypeId, String)> {
                     vec![#(#type_ids),*]
                 }
             }
