@@ -3,13 +3,15 @@ use crate::worker::identity::{IdentityCommon, IdentityOfRx, IdentityOfSimple, Me
 use crate::worker::{CopyOfWorker, ToWorker, WorkerId};
 use crate::{Event, IdentityOfMerge};
 use log::{debug, error};
-use std::any::TypeId;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::spawn;
 use tokio::sync::mpsc::error::SendError;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::oneshot;
+use tokio::time::sleep;
 
 mod sub_bus;
 
@@ -36,9 +38,10 @@ impl From<oneshot::error::RecvError> for BusError {
 pub enum BusData {
     Login(oneshot::Sender<IdentityCommon>, String),
     // SimpleLogin(oneshot::Sender<IdentityCommon>, String),
-    Subscribe(WorkerId, TypeId, String),
+    Subscribe(WorkerId, TypeId, &'static str),
     DispatchEvent(WorkerId, BusEvent),
     Drop(WorkerId),
+    Trace,
 }
 
 #[derive(Clone)]
@@ -99,6 +102,16 @@ impl<const CAP: usize> Bus<CAP> {
     }
     fn run(mut self) {
         spawn(async move {
+            let tx = self.tx.clone();
+            spawn(async move {
+                let time = Duration::from_secs(30);
+                loop {
+                    sleep(time).await;
+                    if tx.send(BusData::Trace).await.is_err() {
+                        return;
+                    }
+                }
+            });
             while let Some(event) = self.rx.recv().await {
                 match event {
                     BusData::Login(tx, name) => {
@@ -109,7 +122,7 @@ impl<const CAP: usize> Bus<CAP> {
                         }
                     }
                     BusData::Drop(worker_id) => {
-                        debug!("{:?} Drop", worker_id);
+                        debug!("{} Drop", worker_id);
                         if let Some(worker) = self.workers.remove(&worker_id) {
                             for ty_id in worker.subscribe_events() {
                                 let should_remove =
@@ -130,17 +143,15 @@ impl<const CAP: usize> Bus<CAP> {
                         }
                     }
                     BusData::DispatchEvent(worker_id, event) => {
-                        debug!(
-                            "{:?} DispatchEvent {:?}",
-                            worker_id,
-                            event.as_ref().type_id()
-                        );
                         if let Some(sub_buses) = self.sub_buses.get(&event.as_ref().type_id()) {
+                            debug!("{} dispatch {}", worker_id, sub_buses.name());
                             sub_buses.send_event(event).await;
+                        } else {
+                            debug!("{} dispatch type_id {:?}", worker_id, event.type_id());
                         }
                     }
                     BusData::Subscribe(worker_id, typeid, name) => {
-                        debug!("Subscribe {:?} {:?}", worker_id, typeid);
+                        debug!("{} subscribe {}", worker_id, name);
                         if let Some(worker) = self.workers.get_mut(&worker_id) {
                             worker.subscribe_event(typeid);
                             if let Some(sub_buses) = self.sub_buses.get_mut(&typeid) {
@@ -150,6 +161,11 @@ impl<const CAP: usize> Bus<CAP> {
                                 copy.send_subscribe(worker.init_subscriber()).await;
                                 self.sub_buses.insert(typeid, copy);
                             }
+                        }
+                    }
+                    BusData::Trace => {
+                        for (_, sub_bus) in self.sub_buses.iter() {
+                            sub_bus.send_trace().await;
                         }
                     }
                 }

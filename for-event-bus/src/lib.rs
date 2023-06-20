@@ -19,17 +19,17 @@ pub use for_event_bus_derive::{Event, Merge, Worker};
 pub type SimpleBus = Bus<1000>;
 
 pub trait Event: Any + Send + Sync + 'static {
-    fn name() -> String
+    fn name() -> &'static str
     where
         Self: Sized;
 }
 
 impl Event for () {
-    fn name() -> String
+    fn name() -> &'static str
     where
         Self: Sized,
     {
-        "()".to_string()
+        "()"
     }
 }
 

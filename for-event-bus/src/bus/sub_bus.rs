@@ -1,5 +1,5 @@
 use crate::bus::BusEvent;
-use log::{debug, error};
+use log::{debug, error, trace};
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 
@@ -12,23 +12,27 @@ pub(crate) enum SubBusData {
     Unsubscribe(WorkerId),
     Event(BusEvent),
     Drop,
+    Trace,
 }
 #[allow(dead_code)]
 pub(crate) struct EntryOfSubBus {
     type_id: TypeId,
+    name: &'static str,
     subscribers: HashSet<WorkerId>,
     tx: Sender<SubBusData>,
 }
 
-// impl Drop for EntryOfSubBus {
-//     fn drop(&mut self) {
-//         if self.tx.try_send(SubBusData::Drop).is_err() {
-//             error!("{:?} send SubBusData::Drop fail", self.type_id);
-//         }
-//     }
-// }
-
 impl EntryOfSubBus {
+    pub fn name(&self) -> &'static str {
+        self.name.clone()
+    }
+
+    pub async fn send_trace(&self) {
+        if self.tx.send(SubBusData::Trace).await.is_err() {
+            error!("fail to send event to sub bus");
+        }
+    }
+
     pub async fn send_event(&self, event: BusEvent) {
         if self.tx.send(SubBusData::Event(event)).await.is_err() {
             error!("fail to send event to sub bus");
@@ -69,23 +73,24 @@ impl EntryOfSubBus {
 /// 子事件总线
 pub struct SubBus<const CAP: usize> {
     type_id: TypeId,
-    name: String,
+    name: &'static str,
     rx: Receiver<SubBusData>,
     subscribers: HashMap<WorkerId, Worker>,
 }
 
 impl<const CAP: usize> SubBus<CAP> {
-    pub(crate) fn init(type_id: TypeId, name: String) -> EntryOfSubBus {
+    pub(crate) fn init(type_id: TypeId, name: &'static str) -> EntryOfSubBus {
         let (tx, rx) = channel(CAP);
         Self {
             type_id,
-            name,
+            name: name.clone(),
             rx,
             subscribers: Default::default(),
         }
         .run();
         EntryOfSubBus {
             type_id,
+            name,
             subscribers: Default::default(),
             tx,
         }
@@ -95,9 +100,11 @@ impl<const CAP: usize> SubBus<CAP> {
             while let Some(data) = self.rx.recv().await {
                 match data {
                     SubBusData::Subscribe(subscriber) => {
+                        trace!("worker {} subscribe {}", subscriber.id(), self.name);
                         self.subscribers.insert(subscriber.id(), subscriber);
                     }
                     SubBusData::Unsubscribe(worker_id) => {
+                        trace!("worker {} unsubscribe {}", worker_id, self.name);
                         self.subscribers.remove(&worker_id);
                     }
                     SubBusData::Event(event) => {
@@ -108,9 +115,15 @@ impl<const CAP: usize> SubBus<CAP> {
                     SubBusData::Drop => {
                         break;
                     }
+                    SubBusData::Trace => {
+                        debug!("subscriber of {}: ", self.name);
+                        for subscriber in self.subscribers.values() {
+                            debug!("\t{}", subscriber.id())
+                        }
+                    }
                 }
             }
-            debug!("{:?} end", self.type_id);
+            debug!("sub-bus {} drop", self.name);
         });
     }
 }

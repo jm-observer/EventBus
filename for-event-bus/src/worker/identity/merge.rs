@@ -5,7 +5,7 @@ pub trait Merge {
     where
         Self: Sized;
 
-    fn subscribe_types() -> Vec<(TypeId, String)>;
+    fn subscribe_types() -> Vec<(TypeId, &'static str)>;
 }
 
 use crate::bus::BusError;

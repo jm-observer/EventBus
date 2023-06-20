@@ -24,7 +24,7 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
                     }));
 
                     type_ids.push(quote!(
-                    (TypeId::of::<#segments>(), #segments::name())
+                    (TypeId::of::<#segments>(), stringify!(#segments))
                     ));
                 } else {
                     return Err(
@@ -48,7 +48,7 @@ fn general_merge(code: TokenStream2) -> Result<TokenStream2, String> {
                     }
                 }
 
-                fn subscribe_types() -> Vec<(TypeId, String)> {
+                fn subscribe_types() -> Vec<(TypeId, &'static str)> {
                     vec![#(#type_ids),*]
                 }
             }
@@ -99,8 +99,8 @@ fn general_event(code: TokenStream2) -> Result<TokenStream2, String> {
     let name = ident.to_string();
     let end = quote!(
         impl for_event_bus::Event for #ident {
-            fn name() -> String {
-                #name.to_string()
+            fn name() -> &'static str {
+                stringify!(#name)
             }
         }
     );

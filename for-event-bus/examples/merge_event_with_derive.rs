@@ -1,4 +1,4 @@
-use for_event_bus::{BusError, Event, IdentityOfSimple, Merge, ToWorker, Worker};
+use for_event_bus::{BusError, Event, IdentityOfRx, Merge, ToWorker, Worker};
 use for_event_bus::{EntryOfBus, IdentityOfMerge, SimpleBus};
 use log::debug;
 use std::any::TypeId;
@@ -59,7 +59,7 @@ impl WorkerA {
 }
 
 struct WorkerDispatcher {
-    identity: IdentityOfSimple<()>,
+    identity: IdentityOfRx,
 }
 
 impl ToWorker for WorkerDispatcher {
@@ -70,7 +70,7 @@ impl ToWorker for WorkerDispatcher {
 
 impl WorkerDispatcher {
     pub async fn init(bus: &EntryOfBus) {
-        let identity = bus.simple_login::<WorkerDispatcher, ()>().await.unwrap();
+        let identity = bus.login::<WorkerDispatcher>().await.unwrap();
         Self { identity }.run();
     }
     fn run(self) {

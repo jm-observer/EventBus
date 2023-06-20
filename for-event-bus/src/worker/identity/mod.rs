@@ -60,7 +60,7 @@ impl Drop for IdentityOfRx {
             .try_send(BusData::Drop(self.id.clone()))
             .is_err()
         {
-            debug!("{:?} send BusData::Drop fail", self.id);
+            debug!("{} send BusData::Drop fail", self.id);
         }
     }
 }

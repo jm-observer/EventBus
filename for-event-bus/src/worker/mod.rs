@@ -1,6 +1,7 @@
 use log::error;
 use std::any::TypeId;
 use std::collections::HashSet;
+use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -11,10 +12,16 @@ pub mod identity;
 
 static ID: AtomicUsize = AtomicUsize::new(0);
 
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Eq, PartialEq, Clone, Hash)]
 pub struct WorkerId {
     id: usize,
     name: Arc<String>,
+}
+
+impl Display for WorkerId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.name, self.id)
+    }
 }
 
 impl WorkerId {
@@ -38,7 +45,7 @@ impl Worker {
     }
     pub async fn send(&self, event: BusEvent) {
         if self.tx.send(event).await.is_err() {
-            error!("send event to {:?} fail", self.id);
+            error!("send event to {} fail", self.id);
         }
     }
 }

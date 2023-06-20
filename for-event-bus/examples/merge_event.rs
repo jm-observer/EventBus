@@ -1,5 +1,5 @@
-use for_event_bus::{upcast, Event};
-use for_event_bus::{BusError, IdentityOfSimple, Merge, ToWorker};
+use for_event_bus::{upcast, Event, IdentityOfRx};
+use for_event_bus::{BusError, Merge, ToWorker};
 use for_event_bus::{EntryOfBus, IdentityOfMerge, SimpleBus};
 use log::debug;
 use std::any::TypeId;
@@ -20,7 +20,7 @@ async fn main() {
         WorkerDispatcher::init(&copy_of_bus).await;
         sleep(Duration::from_secs(5)).await
     }
-    sleep(Duration::from_secs(5)).await
+    sleep(Duration::from_secs(5000)).await
 }
 
 #[derive(Debug, Clone, Event)]
@@ -49,7 +49,7 @@ impl Merge for MergeEvent {
         }
     }
 
-    fn subscribe_types() -> Vec<(TypeId, String)> {
+    fn subscribe_types() -> Vec<(TypeId, &'static str)> {
         vec![
             (TypeId::of::<AEvent>(), AEvent::name()),
             (TypeId::of::<Close>(), Close::name()),
@@ -82,7 +82,7 @@ impl Worker {
 }
 
 struct WorkerDispatcher {
-    identity: IdentityOfSimple<()>,
+    identity: IdentityOfRx,
 }
 
 impl ToWorker for WorkerDispatcher {
@@ -93,7 +93,7 @@ impl ToWorker for WorkerDispatcher {
 
 impl WorkerDispatcher {
     pub async fn init(bus: &EntryOfBus) {
-        let identity = bus.simple_login::<WorkerDispatcher, ()>().await.unwrap();
+        let identity = bus.login::<Self>().await.unwrap();
         Self { identity }.run();
     }
     fn run(self) {
