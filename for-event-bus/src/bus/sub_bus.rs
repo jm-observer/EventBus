@@ -1,11 +1,12 @@
 use crate::bus::BusEvent;
-use log::{debug, error, trace};
+use log::{debug, error, trace, warn};
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 
 use crate::worker::{Worker, WorkerId};
 use tokio::spawn;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc::error::TrySendError;
 
 pub(crate) enum SubBusData {
     Subscribe(Worker),
@@ -108,9 +109,24 @@ impl<const CAP: usize> SubBus<CAP> {
                         self.subscribers.remove(&worker_id);
                     }
                     SubBusData::Event(event) => {
+                        let mut close_ids = Vec::new();
                         for subscriber in self.subscribers.values() {
-                            subscriber.send(event.clone()).await
+                            let Err(e) = subscriber.send(event.clone()).await else {
+                                continue;
+                            };
+                            match e {
+                                TrySendError::Full(_) => {
+                                    warn!("send event to {} fail: full", subscriber.id());
+                                }
+                                TrySendError::Closed(_) => {
+                                    warn!("send event to {} fail: closed", subscriber.id());
+                                    close_ids.push(subscriber.id())
+                                }
+                            }
                         }
+                        close_ids.into_iter().for_each(|x| {
+                            self.subscribers.remove(&x);
+                        });
                     }
                     SubBusData::Drop => {
                         break;

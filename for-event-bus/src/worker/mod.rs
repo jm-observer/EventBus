@@ -1,9 +1,9 @@
-use log::error;
 use std::any::TypeId;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tokio::sync::mpsc::error::TrySendError;
 
 use crate::bus::BusEvent;
 use tokio::sync::mpsc::Sender;
@@ -43,10 +43,8 @@ impl Worker {
     pub fn id(&self) -> WorkerId {
         self.id.clone()
     }
-    pub async fn send(&self, event: BusEvent) {
-        if self.tx.send(event).await.is_err() {
-            error!("send event to {} fail", self.id);
-        }
+    pub async fn send(&self, event: BusEvent) -> Result<(), TrySendError<BusEvent>> {
+        self.tx.try_send(event)
     }
 }
 pub(crate) struct CopyOfWorker {

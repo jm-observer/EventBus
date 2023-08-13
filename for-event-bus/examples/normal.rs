@@ -1,6 +1,4 @@
-use for_event_bus::{
-    upcast, EntryOfBus, Event, IdentityOfRx, IdentityOfSimple, SimpleBus, ToWorker,
-};
+use for_event_bus::{upcast, EntryOfBus, Event, IdentityOfRx, IdentityOfSimple, ToWorker, Bus};
 use log::debug;
 use std::time::Duration;
 use tokio::spawn;
@@ -11,12 +9,12 @@ async fn main() {
     // log
     custom_utils::logger::logger_stdout_debug();
     // init event bus
-    let copy_of_bus = SimpleBus::init();
+    let copy_of_bus = Bus::<2>::init();
     // init worker and subscribe event
     Worker::init(&copy_of_bus).await;
     // init worker and dispatcher event
     WorkerDispatcher::init(&copy_of_bus).await;
-    sleep(Duration::from_secs(5)).await
+    sleep(Duration::from_secs(500)).await
 }
 
 #[derive(Debug, Event)]
@@ -47,7 +45,7 @@ impl Worker {
                 if let Ok(msg) = upcast(event.clone()).downcast::<AEvent>() {
                     debug!("recv {:?}", msg);
                 } else if let Ok(_) = upcast(event.clone()).downcast::<Close>() {
-                    debug!("recv close");
+                    sleep(Duration::from_secs(60)).await;
                     break;
                 }
             }
@@ -72,8 +70,12 @@ impl WorkerDispatcher {
     }
     fn run(self) {
         spawn(async move {
-            self.identity.dispatch_event(AEvent).await.unwrap();
-            self.identity.dispatch_event(Close).await.unwrap();
+            loop {
+                self.identity.dispatch_event(AEvent).await.unwrap();
+                self.identity.dispatch_event(Close).await.unwrap();
+                sleep(Duration::from_secs(5)).await
+            }
+
         });
     }
 }

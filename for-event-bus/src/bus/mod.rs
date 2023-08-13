@@ -147,7 +147,7 @@ impl<const CAP: usize> Bus<CAP> {
                             debug!("{} dispatch {}", worker_id, sub_buses.name());
                             sub_buses.send_event(event).await;
                         } else {
-                            debug!("{} dispatch type_id {:?}", worker_id, event.type_id());
+                            debug!("{} dispatch type_id {:?} that no one subscribe", worker_id, event.type_id());
                         }
                     }
                     BusData::Subscribe(worker_id, typeid, name) => {
