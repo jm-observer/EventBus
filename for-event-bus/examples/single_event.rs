@@ -1,4 +1,4 @@
-use for_event_bus::{BusEvent, EntryOfBus, Event, ToWorker};
+use for_event_bus::{EntryOfBus, Event, ToWorker};
 use for_event_bus::{IdentityOfSimple, SimpleBus};
 use log::debug;
 use std::any::Any;
@@ -19,18 +19,31 @@ async fn main() {
     sleep(Duration::from_secs(5)).await
 }
 
-#[derive(Debug, Event)]
+#[derive(Debug)]
 enum OneEvent<E, C>
 where
-    E: Event,
-    C: Event,
+    E: Any + Send + Sync + 'static,
+    C: Any + Send + Sync + 'static,
 {
     Event(E),
     Command(C),
 }
-#[derive(Debug, Event)]
+
+impl<E, C> Event for OneEvent<E, C>
+where
+    E: Any + Send + Sync + 'static,
+    C: Any + Send + Sync + 'static,
+{
+    fn name() -> &'static str
+    where
+        Self: Sized,
+    {
+        "OneEvent"
+    }
+}
+#[derive(Debug)]
 struct AEvent;
-#[derive(Debug, Event)]
+#[derive(Debug)]
 struct Close;
 
 struct Worker {
@@ -55,10 +68,10 @@ impl Worker {
         spawn(async move {
             while let Ok(event) = self.identity.recv().await {
                 match event.as_ref() {
-                    BusEvent::Event(event) => {
+                    OneEvent::Event(event) => {
                         debug!("WorkerA recv {:?}", event);
                     }
-                    BusEvent::Command(_) => {
+                    OneEvent::Command(_) => {
                         debug!("recv close");
                         break;
                     }
@@ -86,11 +99,11 @@ impl WorkerDispatcher {
     fn run(self) {
         spawn(async move {
             self.identity
-                .dispatch_event(BusEvent::<AEvent, Close>::Event(AEvent))
+                .dispatch_event(OneEvent::<AEvent, Close>::Event(AEvent))
                 .await
                 .unwrap();
             self.identity
-                .dispatch_event(BusEvent::<AEvent, Close>::Command(Close))
+                .dispatch_event(OneEvent::<AEvent, Close>::Command(Close))
                 .await
                 .unwrap();
         });

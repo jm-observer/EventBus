@@ -43,7 +43,7 @@ impl Worker {
     pub fn id(&self) -> WorkerId {
         self.id.clone()
     }
-    pub async fn send(&self, event: BusEvent) -> Result<(), TrySendError<BusEvent>> {
+    pub async fn try_send(&self, event: BusEvent) -> Result<(), TrySendError<BusEvent>> {
         self.tx.try_send(event)
     }
 }

@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::worker::{Worker, WorkerId};
 use tokio::spawn;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub(crate) enum SubBusData {
     Subscribe(Worker),
@@ -111,7 +111,7 @@ impl<const CAP: usize> SubBus<CAP> {
                     SubBusData::Event(event) => {
                         let mut close_ids = Vec::new();
                         for subscriber in self.subscribers.values() {
-                            let Err(e) = subscriber.send(event.clone()).await else {
+                            let Err(e) = subscriber.try_send(event.clone()).await else {
                                 continue;
                             };
                             match e {
