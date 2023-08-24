@@ -50,6 +50,12 @@ pub struct EntryOfBus {
 }
 
 impl EntryOfBus {
+    pub async fn login_with_name(&self, name: String) -> Result<IdentityOfRx, BusError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(BusData::Login(tx, name)).await?;
+        Ok(rx.await?.into())
+    }
+
     pub async fn login<W: ToWorker>(&self) -> Result<IdentityOfRx, BusError> {
         let (tx, rx) = oneshot::channel();
         self.tx.send(BusData::Login(tx, W::name())).await?;
@@ -64,11 +70,34 @@ impl EntryOfBus {
         rx.subscribe().await?;
         Ok(rx)
     }
+
+    pub async fn simple_login_with_name<T: Event>(
+        &self,
+        name: String,
+    ) -> Result<IdentityOfSimple<T>, BusError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(BusData::Login(tx, name)).await?;
+        let rx: IdentityOfSimple<T> = rx.await?.into();
+        rx.subscribe().await?;
+        Ok(rx)
+    }
+
     pub async fn merge_login<W: ToWorker, T: Event + Merge>(
         &self,
     ) -> Result<IdentityOfMerge<T>, BusError> {
         let (tx, rx) = oneshot::channel();
         self.tx.send(BusData::Login(tx, W::name())).await?;
+        let rx: IdentityOfMerge<T> = rx.await?.into();
+        rx.subscribe().await?;
+        Ok(rx)
+    }
+
+    pub async fn merge_login_with_name<T: Event + Merge>(
+        &self,
+        name: String,
+    ) -> Result<IdentityOfMerge<T>, BusError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(BusData::Login(tx, name)).await?;
         let rx: IdentityOfMerge<T> = rx.await?.into();
         rx.subscribe().await?;
         Ok(rx)
@@ -147,7 +176,11 @@ impl<const CAP: usize> Bus<CAP> {
                             debug!("{} dispatch {}", worker_id, sub_buses.name());
                             sub_buses.send_event(event).await;
                         } else {
-                            debug!("{} dispatch type_id {:?} that no one subscribe", worker_id, event.type_id());
+                            debug!(
+                                "{} dispatch type_id {:?} that no one subscribe",
+                                worker_id,
+                                event.type_id()
+                            );
                         }
                     }
                     BusData::Subscribe(worker_id, typeid, name) => {
