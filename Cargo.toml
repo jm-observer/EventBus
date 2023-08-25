@@ -1,5 +1,10 @@
 [workspace]
 members = ["for-event-bus", "for-event-bus-derive"]
 
-[patch.crates-io]
-for-event-bus-derive = { path = "./for-event-bus-derive"}
+#[patch.crates-io]
+#for-event-bus-derive = { path = "./for-event-bus-derive"}
+
+
+
+#[patch.crates-io]
+#custom-utils = {path = "../custom-utils"}

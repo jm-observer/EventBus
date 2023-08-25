@@ -132,10 +132,20 @@ impl<const CAP: usize> SubBus<CAP> {
                         break;
                     }
                     SubBusData::Trace => {
-                        debug!("subscriber of {}: ", self.name);
-                        for subscriber in self.subscribers.values() {
-                            debug!("\t{}", subscriber.id())
-                        }
+                        let trace_info =
+                            self.subscribers
+                                .values()
+                                .fold(String::new(), |mut x, item| {
+                                    if !x.is_empty() {
+                                        x.push(',');
+                                    }
+                                    x.push_str(item.id().name());
+                                    x
+                                });
+                        debug!("subscriber of {}: {}", self.name, trace_info);
+                        // for subscriber in self.subscribers.values() {
+                        //     debug!("\t{}", subscriber.id())
+                        // }
                     }
                 }
             }

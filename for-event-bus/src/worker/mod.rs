@@ -32,6 +32,9 @@ impl WorkerId {
             name: Arc::new(name),
         }
     }
+    pub fn name(&self) -> &str {
+        self.name.as_str()
+    }
 }
 
 pub(crate) struct Worker {
